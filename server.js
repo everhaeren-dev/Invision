@@ -216,6 +216,15 @@ app.post('/api/projects', (req, res) => {
   res.json(db.createProject(name.trim(), token))
 })
 
+app.put('/api/projects/:id', (req, res) => {
+  const project = db.getProject(req.params.id)
+  if (!project) return res.status(404).json({ error: 'Not found' })
+  const { name } = req.body
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Name required' })
+  db.updateProjectName(project.id, name.trim())
+  res.json({ ok: true })
+})
+
 app.delete('/api/projects/:id', (req, res) => {
   const project = db.getProject(req.params.id)
   if (!project) return res.status(404).json({ error: 'Not found' })

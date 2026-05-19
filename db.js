@@ -58,6 +58,13 @@ module.exports = {
     return p
   },
 
+  updateProjectName: (id, name) => {
+    const db = load()
+    const p = db.projects.find(p => p.id === Number(id))
+    if (p) p.name = name
+    save(db)
+  },
+
   deleteProject: (id) => {
     const db = load()
     id = Number(id)

@@ -53,10 +53,47 @@ async function loadProjects() {
       <button class="card-menu-btn" title="Options">&#8942;</button>
     `
 
-    // Click on card → open project (but not on menu button)
+    // Click on card → open project (debounced on name area to allow dblclick rename)
+    let _clickTimer = null
     card.addEventListener('click', e => {
-      if (e.target.closest('.card-menu-btn') || e.target.closest('.card-dropdown')) return
-      window.location.href = `/project/${p.id}`
+      if (e.target.closest('.card-menu-btn') || e.target.closest('.card-dropdown') || e.target.tagName === 'INPUT') return
+      if (e.target.closest('.project-name')) {
+        if (_clickTimer) return
+        _clickTimer = setTimeout(() => { _clickTimer = null; window.location.href = `/project/${p.id}` }, 220)
+      } else {
+        window.location.href = `/project/${p.id}`
+      }
+    })
+
+    // Double-click on project name → rename inline
+    card.querySelector('.project-name').addEventListener('dblclick', e => {
+      if (_clickTimer) { clearTimeout(_clickTimer); _clickTimer = null }
+      const nameEl = card.querySelector('.project-name')
+      const input = document.createElement('input')
+      input.type = 'text'
+      input.value = p.name
+      input.style.cssText = 'width:100%;background:var(--bg3);border:1px solid var(--accent);border-radius:4px;color:var(--text);font-size:14px;font-weight:700;padding:2px 6px;outline:none;font-family:inherit;'
+      nameEl.replaceWith(input)
+      input.select()
+      input.focus()
+      const save = async () => {
+        const newName = input.value.trim()
+        if (newName && newName !== p.name) {
+          p.name = newName
+          await fetch(`/api/projects/${p.id}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName })
+          })
+        }
+        loadProjects()
+      }
+      input.addEventListener('blur', save)
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur() }
+        if (e.key === 'Escape') { input.value = p.name; input.blur() }
+        e.stopPropagation()
+      })
+      input.addEventListener('click', e => e.stopPropagation())
     })
 
     // Menu button
