@@ -360,6 +360,8 @@ input, textarea { font-family: inherit; }
 }
 .screen-card:hover { border-color: var(--accent); transform: translateY(-3px);
   box-shadow: 0 8px 28px #ff3b6b22; }
+.screen-card.dragging { opacity: 0.35; cursor: grabbing; transform: none; }
+.screen-card.drag-over { border-color: var(--accent); box-shadow: 0 0 0 3px #ff3b6b55; transform: none; }
 .screen-thumb {
   width: 100%; aspect-ratio: 4/3; overflow: hidden; background: var(--bg3);
   display: flex; align-items: center; justify-content: center;

@@ -200,6 +200,45 @@ function renderScreensGrid(grid) {
       if (_clickTimer) { clearTimeout(_clickTimer); _clickTimer = null }
       startScreenRename(card, pid)
     })
+
+    // Drag & drop reorder in grid
+    card.setAttribute('draggable', 'true')
+    let enterCount = 0
+    card.addEventListener('dragstart', e => {
+      if (e.target.tagName === 'INPUT' || e.target.closest('.screen-menu')) { e.preventDefault(); return }
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', String(pid))
+      e.stopPropagation()
+      setTimeout(() => card.classList.add('dragging'), 0)
+    })
+    card.addEventListener('dragend', () => { card.classList.remove('dragging', 'drag-over'); enterCount = 0 })
+    card.addEventListener('dragenter', e => {
+      e.preventDefault(); e.stopPropagation()
+      if (enterCount === 0) card.classList.add('drag-over')
+      enterCount++
+    })
+    card.addEventListener('dragleave', e => {
+      e.stopPropagation()
+      enterCount--
+      if (enterCount <= 0) { enterCount = 0; card.classList.remove('drag-over') }
+    })
+    card.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move' })
+    card.addEventListener('drop', async e => {
+      e.preventDefault(); e.stopPropagation()
+      card.classList.remove('drag-over'); enterCount = 0
+      const draggedPid = Number(e.dataTransfer.getData('text/plain'))
+      if (!draggedPid || draggedPid === pid) return
+      const draggedIdx = pages.findIndex(p => p.id === draggedPid)
+      const targetIdx = pages.findIndex(p => p.id === pid)
+      if (draggedIdx === -1 || targetIdx === -1) return
+      const [draggedPage] = pages.splice(draggedIdx, 1)
+      pages.splice(targetIdx, 0, draggedPage)
+      await fetch(`/api/projects/${projectId}/pages/order`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pages: pages.map((p, i) => ({ id: p.id, order: i })) })
+      })
+      showScreensView()
+    })
   })
 }
 
