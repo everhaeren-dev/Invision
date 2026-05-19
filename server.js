@@ -40,6 +40,12 @@ app.get('/api/projects', (req, res) => {
   res.json(db.getProjects())
 })
 
+app.get('/api/projects/:id', (req, res) => {
+  const project = db.getProject(req.params.id)
+  if (!project) return res.status(404).json({ error: 'Not found' })
+  res.json(project)
+})
+
 app.post('/api/projects', (req, res) => {
   const { name } = req.body
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name required' })
@@ -83,6 +89,15 @@ app.post('/api/projects/:projectId/pages', upload.array('images'), (req, res) =>
   }
 
   res.json({ uploaded: pages, pages: db.getPages(project.id) })
+})
+
+app.put('/api/pages/:id', (req, res) => {
+  const page = db.getPage(req.params.id)
+  if (!page) return res.status(404).json({ error: 'Not found' })
+  const { name } = req.body
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Name required' })
+  db.updatePageName(page.id, name.trim())
+  res.json({ ok: true })
 })
 
 app.delete('/api/pages/:id', (req, res) => {

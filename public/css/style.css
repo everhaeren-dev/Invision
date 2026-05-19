@@ -284,6 +284,43 @@ input, textarea { font-family: inherit; }
 
 .sidebar-empty { padding: 32px 16px; text-align: center; color: var(--text2); font-size: 13px; }
 
+/* ── Bottom pages strip ───────────────────────────────────── */
+.bottom-bar {
+  height: 118px; background: var(--bg2); border-top: 1px solid var(--border);
+  flex-shrink: 0; overflow-x: auto; overflow-y: hidden;
+  display: flex; align-items: center; padding: 0 20px; gap: 12px;
+}
+.bottom-bar::-webkit-scrollbar { height: 4px; }
+
+.strip-item {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  flex-shrink: 0; cursor: pointer; width: 90px;
+}
+.strip-thumb {
+  width: 90px; height: 64px; border-radius: 6px; overflow: hidden;
+  border: 2px solid transparent; background: var(--bg3);
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color .15s, box-shadow .15s;
+}
+.strip-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.strip-item.active .strip-thumb {
+  border-color: var(--accent); box-shadow: 0 0 0 2px #ff3b6b44;
+}
+.strip-item:hover:not(.active) .strip-thumb { border-color: var(--text2); }
+
+.strip-name {
+  width: 100%; text-align: center; font-size: 11px; color: var(--text2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  outline: none; background: transparent; border: none; cursor: pointer;
+  padding: 2px 4px; border-radius: 4px; color: var(--text2); font-family: inherit;
+}
+.strip-item.active .strip-name { color: var(--accent); }
+.strip-name:focus {
+  background: var(--bg3); border: 1px solid var(--accent); color: var(--text);
+  cursor: text; white-space: normal; overflow: visible;
+}
+.strip-name:hover:not(:focus) { color: var(--text); }
+
 /* ── Drop overlay ─────────────────────────────────────────── */
 .drop-overlay {
   position: fixed; inset: 0; background: #0c0c1aee; z-index: 50;

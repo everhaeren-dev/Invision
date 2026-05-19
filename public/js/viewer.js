@@ -29,6 +29,7 @@ const shareUrlInput= document.getElementById('shareUrl')
 const uploadProg   = document.getElementById('uploadProgress')
 const progressFill = document.getElementById('progressFill')
 const pagesCount   = document.getElementById('pagesCount')
+const bottomBar    = document.getElementById('bottomBar')
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
@@ -76,6 +77,57 @@ function renderPageSelect() {
     `<option value="${p.id}">${esc(p.name)}${p.is_retina ? ' (@2x)' : ''}</option>`
   ).join('')
   pagesCount.textContent = pages.length ? `${pages.length} page${pages.length > 1 ? 's' : ''}` : ''
+  renderBottomBar()
+}
+
+function renderBottomBar() {
+  if (!pages.length) { bottomBar.style.display = 'none'; return }
+  bottomBar.style.display = 'flex'
+  bottomBar.innerHTML = pages.map(p => `
+    <div class="strip-item${p.id === currentPageId ? ' active' : ''}" data-pid="${p.id}">
+      <div class="strip-thumb">
+        <img src="/uploads/${project.id}/${p.filename}" alt="" draggable="false">
+      </div>
+      <input class="strip-name" data-pid="${p.id}" value="${esc(p.name)}" title="Click to rename">
+    </div>
+  `).join('')
+
+  bottomBar.querySelectorAll('.strip-item').forEach(item => {
+    item.querySelector('.strip-thumb').addEventListener('click', () => {
+      switchPage(Number(item.dataset.pid))
+    })
+  })
+
+  bottomBar.querySelectorAll('.strip-name').forEach(input => {
+    input.addEventListener('focus', e => e.target.select())
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.target.blur() }
+      if (e.key === 'Escape') {
+        const p = pages.find(p => p.id === Number(e.target.dataset.pid))
+        if (p) e.target.value = p.name
+        e.target.blur()
+      }
+      e.stopPropagation()
+    })
+    input.addEventListener('blur', async e => {
+      const pid = Number(e.target.dataset.pid)
+      const newName = e.target.value.trim()
+      if (!newName) { e.target.value = pages.find(p => p.id === pid)?.name || ''; return }
+      const p = pages.find(p => p.id === pid)
+      if (!p || p.name === newName) return
+      p.name = newName
+      await fetch(`/api/pages/${pid}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName })
+      })
+      pageSelect.querySelector(`option[value="${pid}"]`).textContent = newName + (p.is_retina ? ' (@2x)' : '')
+      renderSidebar()
+    })
+  })
+
+  // Scroll active item into view
+  const activeItem = bottomBar.querySelector('.strip-item.active')
+  if (activeItem) activeItem.scrollIntoView({ inline: 'nearest', behavior: 'smooth' })
 }
 
 function switchPage(pageId) {
@@ -106,6 +158,7 @@ function switchPage(pageId) {
 
   retinaBadge.classList.toggle('hidden', !page.is_retina)
   renderSidebar()
+  renderBottomBar()
 }
 
 function showNoPages() {
@@ -485,7 +538,6 @@ async function uploadFiles(files) {
     await loadAllComments()
 
     renderPageSelect()
-    pagesCount.textContent = `${pages.length} page${pages.length > 1 ? 's' : ''}`
 
     // switch to first new page
     const newPage = res.pages[res.pages.length - res.uploaded.length]

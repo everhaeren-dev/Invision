@@ -87,6 +87,13 @@ module.exports = {
     save(db)
   },
 
+  updatePageName: (id, name) => {
+    const db = load()
+    const p = db.pages.find(p => p.id === Number(id))
+    if (p) p.name = name
+    save(db)
+  },
+
   updatePageOrder: (pages) => {
     const db = load()
     for (const { id, order } of pages) {
