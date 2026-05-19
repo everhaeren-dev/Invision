@@ -331,24 +331,44 @@ function renderBottomBar() {
       }
     })
 
-    // Drag & drop reorder
+    // Drag & drop reorder — use enterCount to handle child-element dragleave firing
     item.setAttribute('draggable', 'true')
+    let enterCount = 0
     item.addEventListener('dragstart', e => {
+      if (e.target.tagName === 'INPUT') { e.preventDefault(); return }
+      e.dataTransfer.effectAllowed = 'move'
       e.dataTransfer.setData('text/plain', String(item.dataset.pid))
-      item.style.opacity = '0.4'
+      e.stopPropagation()
+      setTimeout(() => item.classList.add('dragging'), 0)
     })
-    item.addEventListener('dragend', () => { item.style.opacity = ''; item.style.outline = '' })
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging', 'drag-over')
+      enterCount = 0
+    })
+    item.addEventListener('dragenter', e => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (enterCount === 0) item.classList.add('drag-over')
+      enterCount++
+    })
+    item.addEventListener('dragleave', e => {
+      e.stopPropagation()
+      enterCount--
+      if (enterCount <= 0) { enterCount = 0; item.classList.remove('drag-over') }
+    })
     item.addEventListener('dragover', e => {
       e.preventDefault()
-      item.style.outline = '2px solid var(--accent)'
+      e.stopPropagation()
+      e.dataTransfer.dropEffect = 'move'
     })
-    item.addEventListener('dragleave', () => { item.style.outline = '' })
     item.addEventListener('drop', async e => {
       e.preventDefault()
-      item.style.outline = ''
+      e.stopPropagation()
+      item.classList.remove('drag-over')
+      enterCount = 0
       const draggedPid = Number(e.dataTransfer.getData('text/plain'))
       const targetPid = Number(item.dataset.pid)
-      if (draggedPid === targetPid) return
+      if (!draggedPid || draggedPid === targetPid) return
       const draggedIdx = pages.findIndex(p => p.id === draggedPid)
       const targetIdx = pages.findIndex(p => p.id === targetPid)
       if (draggedIdx === -1 || targetIdx === -1) return

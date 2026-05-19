@@ -397,6 +397,8 @@ input, textarea { font-family: inherit; }
   transition: border-color .15s, box-shadow .15s;
 }
 .strip-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.strip-item.dragging { opacity: 0.35; cursor: grabbing; }
+.strip-item.drag-over .strip-thumb { border-color: var(--accent); box-shadow: 0 0 0 3px #ff3b6b55; }
 .strip-item.active .strip-thumb {
   border-color: var(--accent); box-shadow: 0 0 0 2px #ff3b6b44;
 }
