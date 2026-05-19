@@ -272,6 +272,7 @@ function enterViewerMode(pageId) {
 }
 
 document.getElementById('backToScreens').addEventListener('click', () => {
+  canvasInner.querySelectorAll('.archive-overlay').forEach(el => el.remove())
   loadAllComments().then(() => showScreensView())
 })
 
@@ -700,45 +701,49 @@ document.querySelectorAll('.filter-tab').forEach(tab => {
     document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'))
     tab.classList.add('active')
     commentFilter = tab.dataset.filter
-    archivedPageView = null
-
-    if (commentFilter === 'archive') {
-      // Show archive sidebar, hide comment pins
-      canvasInner.querySelectorAll('.pin, .comment-bubble, .pending-pin').forEach(el => el.remove())
-      canvasInner.querySelector('.archive-overlay')?.remove()
-      addCommentBtn.style.display = 'none'
-      renderArchiveSidebar()
-    } else {
-      // Restore normal view
-      addCommentBtn.style.display = viewMode === 'viewer' ? 'flex' : 'none'
-      if (viewMode === 'viewer') {
-        // Remove archive overlay if present
-        canvasInner.querySelector('.archive-overlay')?.remove()
-        // Restore the current page image if it was changed to archived
-        const page = pages.find(p => p.id === currentPageId)
-        if (page) {
-          canvasImg.src = `/uploads/${project.id}/${page.filename}`
-          canvasImg.onload = () => {
-            if (page.is_retina) {
-              canvasImg.style.width  = (canvasImg.naturalWidth  / 2) + 'px'
-              canvasImg.style.height = (canvasImg.naturalHeight / 2) + 'px'
-            } else {
-              canvasImg.style.width  = ''
-              canvasImg.style.height = ''
-            }
-            renderPins()
-          }
-        }
-      }
-      renderPins()
-      renderSidebar()
-    }
+    renderPins()
+    renderSidebar()
   })
 })
 
 // ── Upload ────────────────────────────────────────────────────────────────────
+async function showArchiveConfirm(conflicts) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div')
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center;'
+    const box = document.createElement('div')
+    box.style.cssText = 'background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:28px 32px;max-width:440px;width:90%;'
+    box.innerHTML = `
+      <h3 style="margin:0 0 12px;font-size:17px;font-weight:700">Fichier${conflicts.length > 1 ? 's' : ''} déjà existant${conflicts.length > 1 ? 's' : ''}</h3>
+      <p style="color:var(--text2);font-size:13px;margin:0 0 14px">La version actuelle sera archivée (commentaires conservés) avant remplacement :</p>
+      <ul style="margin:0 0 22px;padding:0 0 0 18px;font-size:13px;line-height:2.2">
+        ${conflicts.map(c => `<li><strong>${esc(c.filename)}</strong> remplace <em>"${esc(c.existingName)}"</em></li>`).join('')}
+      </ul>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" id="_cfCancel">Annuler</button>
+        <button class="btn btn-primary" id="_cfOk">Archiver &amp; remplacer</button>
+      </div>
+    `
+    overlay.appendChild(box)
+    document.body.appendChild(overlay)
+    overlay.querySelector('#_cfCancel').onclick = () => { overlay.remove(); resolve(false) }
+    overlay.querySelector('#_cfOk').onclick = () => { overlay.remove(); resolve(true) }
+  })
+}
+
 async function uploadFiles(files) {
   if (!files.length) return
+
+  // Check for filename conflicts before uploading
+  try {
+    const names = files.map(f => f.name).join(',')
+    const conflicts = await fetch(`/api/projects/${projectId}/pages/conflicts?names=${encodeURIComponent(names)}`).then(r => r.json())
+    if (conflicts.length > 0) {
+      const confirmed = await showArchiveConfirm(conflicts)
+      if (!confirmed) return
+    }
+  } catch (e) { /* proceed if check fails */ }
+
   const fd = new FormData()
   for (const f of files) fd.append('images', f)
 
@@ -757,11 +762,6 @@ async function uploadFiles(files) {
 
     // Refresh archived pages list
     archivedPages = await fetch(`/api/projects/${projectId}/archived`).then(r => r.json())
-
-    // Show archive toast if pages were archived
-    if (res.archived && res.archived.length) {
-      showToastMessage(`${res.archived.length} page${res.archived.length > 1 ? 's' : ''} archivée${res.archived.length > 1 ? 's' : ''} (remplacée${res.archived.length > 1 ? 's' : ''} par nouvelle version)`)
-    }
 
     if (viewMode === 'screens') {
       showScreensView()
@@ -808,47 +808,23 @@ function showToastMessage(msg) {
 }
 
 // ── Archive view ───────────────────────────────────────────────────────────────
-function renderArchiveSidebar() {
-  if (!archivedPages.length) {
-    sidebarScroll.innerHTML = '<div class="sidebar-empty">Aucune page archivée.</div>'
-    return
-  }
-  sidebarScroll.innerHTML = archivedPages.map(p => `
-    <div class="archive-item" data-pid="${p.id}" style="padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <img src="/uploads/${project.id}/${p.filename}" style="width:48px;height:36px;object-fit:cover;border-radius:4px;border:1px solid var(--border);" alt="">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}</div>
-          <div style="font-size:11px;color:var(--text2);">v${p.version || 1} · archivée ${relTime(p.archived_at)}</div>
-        </div>
-      </div>
-    </div>
-  `).join('')
-
-  sidebarScroll.querySelectorAll('.archive-item').forEach(item => {
-    item.addEventListener('mouseenter', () => item.style.background = 'var(--bg3)')
-    item.addEventListener('mouseleave', () => item.style.background = '')
-    item.addEventListener('click', () => {
-      const pid = Number(item.dataset.pid)
-      showArchivedPage(pid)
-    })
-  })
-}
-
-function showArchivedPage(pageId) {
-  archivedPageView = pageId
+function showArchivedPageViewer(pageId) {
   const page = archivedPages.find(p => p.id === pageId)
   if (!page) return
 
-  // Switch to viewer mode display if not already
   screensView.style.display = 'none'
   viewerBody.style.display = 'flex'
   addCommentBtn.style.display = 'none'
   bottomBar.style.display = 'none'
+  document.getElementById('backToScreens').style.display = 'flex'
+  document.getElementById('divBack').style.display = ''
+  document.getElementById('divSelect').style.display = 'none'
+  pageSelect.style.display = 'none'
+  document.getElementById('zoomSection').style.display = 'none'
 
   canvasInner.classList.remove('hidden')
-  // Remove existing archive overlay
-  canvasInner.querySelector('.archive-overlay')?.remove()
+  canvasInner.querySelectorAll('.pin, .comment-bubble, .pending-pin, .archive-overlay').forEach(el => el.remove())
+  retinaBadge.classList.add('hidden')
 
   canvasImg.src = `/uploads/${project.id}/${page.filename}`
   canvasImg.onload = () => {
@@ -859,7 +835,6 @@ function showArchivedPage(pageId) {
       canvasImg.style.width  = ''
       canvasImg.style.height = ''
     }
-    // Add archive overlay
     const overlay = document.createElement('div')
     overlay.className = 'archive-overlay'
     overlay.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:10;'
@@ -867,9 +842,21 @@ function showArchivedPage(pageId) {
     canvasInner.appendChild(overlay)
   }
 
-  retinaBadge.classList.add('hidden')
-  // Clear pins (archived page is read-only)
-  canvasInner.querySelectorAll('.pin, .comment-bubble, .pending-pin').forEach(el => el.remove())
+  const comments = page.comments || []
+  sidebarScroll.innerHTML = `
+    <div style="padding:10px 16px;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);background:var(--bg3)">
+      <strong>${esc(page.name)}</strong> — version ${page.version || 1} (archivée)
+    </div>
+  ` + (comments.length ? comments.map((c, i) => `
+    <div class="comment-item">
+      <div class="ci-header">
+        <div class="ci-pin ${c.is_team ? 'team' : 'client'}">${i + 1}</div>
+        <span class="ci-author">${esc(c.author)}</span>
+        <span class="tag ${c.is_team ? 'tag-team' : 'tag-client'}" style="font-size:10px;padding:1px 6px">${c.is_team ? 'Team' : 'Client'}</span>
+      </div>
+      <div class="ci-text">${esc(c.text)}</div>
+    </div>
+  `).join('') : '<div class="sidebar-empty">Pas de commentaires.</div>')
 }
 
 // ── Share ─────────────────────────────────────────────────────────────────────
