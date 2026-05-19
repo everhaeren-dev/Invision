@@ -123,7 +123,7 @@ app.get('/api/share/:token', (req, res) => {
   if (!project) return res.status(404).json({ error: 'Not found' })
   const pages = db.getPages(project.id).map(p => ({
     ...p,
-    comments: db.getComments(p.id, false)
+    comments: db.getComments(p.id, false).map(c => ({ ...c, replies: db.getReplies(c.id) }))
   }))
   res.json({ project, pages })
 })
@@ -137,6 +137,19 @@ app.post('/api/share/:token/comments', (req, res) => {
   if (!text || !author) return res.status(400).json({ error: 'text and author required' })
   const r = db.createComment(page.id, x, y, text, author, false)
   res.json({ id: r.lastInsertRowid, page_id: page.id, x, y, text, author, is_team: 0, created_at: new Date().toISOString() })
+})
+
+app.post('/api/share/:token/comments/:id/replies', (req, res) => {
+  const project = db.getProjectByToken(req.params.token)
+  if (!project) return res.status(404).json({ error: 'Not found' })
+  const parent = db.getComment(req.params.id)
+  if (!parent) return res.status(404).json({ error: 'Not found' })
+  const page = db.getPage(parent.page_id)
+  if (!page || page.project_id !== project.id) return res.status(403).json({ error: 'Forbidden' })
+  const { text, author } = req.body
+  if (!text || !author) return res.status(400).json({ error: 'text and author required' })
+  const r = db.createComment(parent.page_id, null, null, text, author, false, parent.id, null)
+  res.json({ id: r.lastInsertRowid, page_id: parent.page_id, parent_id: parent.id, text, author, is_team: 0, created_at: new Date().toISOString() })
 })
 
 app.get('/api/share/:token/clients', (req, res) => {
@@ -316,7 +329,8 @@ app.get('/api/projects/:projectId/archived', (req, res) => {
 app.get('/api/pages/:pageId/comments', (req, res) => {
   const page = db.getPage(req.params.pageId)
   if (!page) return res.status(404).json({ error: 'Not found' })
-  res.json(db.getComments(page.id))
+  const comments = db.getComments(page.id).map(c => ({ ...c, replies: db.getReplies(c.id) }))
+  res.json(comments)
 })
 
 app.post('/api/pages/:pageId/comments', (req, res) => {
@@ -332,6 +346,31 @@ app.delete('/api/comments/:id', (req, res) => {
   const comment = db.getComment(req.params.id)
   if (!comment) return res.status(404).json({ error: 'Not found' })
   db.deleteComment(comment.id)
+  res.json({ ok: true })
+})
+
+// Reply to a comment
+app.post('/api/comments/:id/replies', (req, res) => {
+  const parent = db.getComment(req.params.id)
+  if (!parent) return res.status(404).json({ error: 'Not found' })
+  const { text, author, is_team } = req.body
+  if (!text || !author) return res.status(400).json({ error: 'text and author required' })
+  const r = db.createComment(parent.page_id, null, null, text, author, is_team, parent.id, null)
+  res.json({ id: r.lastInsertRowid, page_id: parent.page_id, parent_id: parent.id, text, author, is_team: is_team ? 1 : 0, created_at: new Date().toISOString() })
+})
+
+// Resolve / reopen a comment
+app.put('/api/comments/:id/resolve', (req, res) => {
+  const c = db.getComment(req.params.id)
+  if (!c) return res.status(404).json({ error: 'Not found' })
+  db.resolveComment(c.id)
+  res.json({ ok: true })
+})
+
+app.put('/api/comments/:id/reopen', (req, res) => {
+  const c = db.getComment(req.params.id)
+  if (!c) return res.status(404).json({ error: 'Not found' })
+  db.reopenComment(c.id)
   res.json({ ok: true })
 })
 

@@ -165,15 +165,36 @@ module.exports = {
   // ── Comments ──────────────────────────────────────────────────────────────
   getComments: (pageId, teamOnly = null) => {
     const db = load()
-    let cs = db.comments.filter(c => c.page_id === Number(pageId))
+    let cs = db.comments.filter(c => c.page_id === Number(pageId) && !c.parent_id)
     if (teamOnly === false) cs = cs.filter(c => !c.is_team)
     else if (teamOnly === true) cs = cs.filter(c => c.is_team)
     return cs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
   },
 
-  createComment: (pageId, x, y, text, author, isTeam) => {
+  getReplies: (commentId) => {
     const db = load()
-    const c = { id: nextId(db, 'comments'), page_id: Number(pageId), x, y, text, author, is_team: isTeam ? 1 : 0, created_at: now() }
+    return db.comments
+      .filter(c => c.parent_id === Number(commentId))
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  },
+
+  resolveComment: (id) => {
+    const db = load()
+    const c = db.comments.find(c => c.id === Number(id))
+    if (c) c.status = 'resolved'
+    save(db)
+  },
+
+  reopenComment: (id) => {
+    const db = load()
+    const c = db.comments.find(c => c.id === Number(id))
+    if (c) c.status = 'open'
+    save(db)
+  },
+
+  createComment: (pageId, x, y, text, author, isTeam, parentId = null, status = 'open') => {
+    const db = load()
+    const c = { id: nextId(db, 'comments'), page_id: Number(pageId), x, y, text, author, is_team: isTeam ? 1 : 0, parent_id: parentId, status: parentId ? null : status, created_at: now() }
     db.comments.push(c)
     save(db)
     return { lastInsertRowid: c.id }
@@ -181,7 +202,8 @@ module.exports = {
 
   deleteComment: (id) => {
     const db = load()
-    db.comments = db.comments.filter(c => c.id !== Number(id))
+    id = Number(id)
+    db.comments = db.comments.filter(c => c.id !== id && c.parent_id !== id)
     save(db)
   },
 

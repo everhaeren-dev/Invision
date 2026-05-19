@@ -44,6 +44,15 @@ function relTime(d) {
   return `${Math.floor(h / 24)}d ago`
 }
 function getAuthor() { return localStorage.getItem('iv_team_author') || 'Team' }
+function markPageSeen(pageId) {
+  localStorage.setItem('iv_seen_' + pageId, new Date().toISOString())
+}
+function getNewClientCommentCount(pageId) {
+  const lastSeen = localStorage.getItem('iv_seen_' + pageId)
+  const comments = allComments[pageId] || []
+  if (!lastSeen) return comments.filter(c => !c.is_team).length
+  return comments.filter(c => !c.is_team && new Date(c.created_at) > new Date(lastSeen)).length
+}
 
 // ── Load data ─────────────────────────────────────────────────────────────────
 async function init() {
@@ -534,7 +543,7 @@ function renderPins() {
 
   filteredComments(currentPageId).forEach((c, idx) => {
     const pin = document.createElement('div')
-    pin.className = `pin ${c.is_team ? 'team-pin' : 'client-pin'}${c.id === activePinId ? ' active' : ''}`
+    pin.className = `pin ${c.is_team ? 'team-pin' : 'client-pin'}${c.id === activePinId ? ' active' : ''}${c.status === 'resolved' ? ' resolved-pin' : ''}`
     pin.style.left = c.x + '%'
     pin.style.top  = c.y + '%'
     pin.textContent = idx + 1
@@ -554,9 +563,10 @@ function renderPins() {
 
 function filteredComments(pageId) {
   const cs = allComments[pageId] || []
-  if (commentFilter === 'team')   return cs.filter(c => c.is_team)
-  if (commentFilter === 'client') return cs.filter(c => !c.is_team)
-  return cs
+  if (commentFilter === 'team')     return cs.filter(c => c.is_team)
+  if (commentFilter === 'client')   return cs.filter(c => !c.is_team)
+  if (commentFilter === 'resolved') return cs.filter(c => c.status === 'resolved')
+  return cs  // 'all': includes open AND resolved
 }
 
 // Bubble is appended to canvasInner (not the pin), positioned by percentage
@@ -579,18 +589,79 @@ function showBubble(comment, num) {
     bubble.style.transform = 'translate(-50%, -100%)'
   }
 
+  const replies = comment.replies || []
+  const repliesHtml = replies.map(r => `
+    <div class="reply-item">
+      <div class="reply-header">
+        <span class="ci-author">${esc(r.author)}</span>
+        <span class="tag ${r.is_team ? 'tag-team' : 'tag-client'}" style="font-size:10px;padding:1px 6px">${r.is_team ? 'Team' : 'Client'}</span>
+        <span class="bubble-time">${relTime(r.created_at)}</span>
+      </div>
+      <div class="reply-text">${esc(r.text)}</div>
+    </div>
+  `).join('')
+
+  const isResolved = comment.status === 'resolved'
+
   bubble.innerHTML = `
     <div class="bubble-header">
       <span class="ci-pin ${comment.is_team ? 'team' : 'client'}" style="width:20px;height:20px;font-size:10px;flex-shrink:0">${num}</span>
       <span class="bubble-author">${esc(comment.author)}</span>
       <span class="tag ${comment.is_team ? 'tag-team' : 'tag-client'}">${comment.is_team ? 'Team' : 'Client'}</span>
       <span class="bubble-time">${relTime(comment.created_at)}</span>
+      ${isResolved ? '<span class="resolved-badge">✓ Résolu</span>' : ''}
     </div>
-    <div class="bubble-text">${esc(comment.text)}</div>
-    <button class="bubble-delete" data-id="${comment.id}">Delete</button>
+    <div class="bubble-text${isResolved ? ' resolved-text' : ''}">${esc(comment.text)}</div>
+    ${replies.length ? `<div class="replies-thread">${repliesHtml}</div>` : ''}
+    <div class="reply-form">
+      <textarea class="nc-textarea reply-textarea" placeholder="Répondre…" rows="2" id="replyText-${comment.id}"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-primary" style="padding:4px 10px;font-size:12px" id="replySend-${comment.id}">Répondre</button>
+          <button class="bubble-delete" data-id="${comment.id}">Supprimer</button>
+        </div>
+        <button class="resolve-btn" data-id="${comment.id}" data-resolved="${isResolved ? '1' : '0'}">
+          ${isResolved ? '↩ Rouvrir' : '✓ Résoudre'}
+        </button>
+      </div>
+    </div>
   `
+
   bubble.querySelector('.bubble-delete').addEventListener('click', e => {
     e.stopPropagation(); deleteComment(comment.id)
+  })
+  bubble.querySelector('.resolve-btn').addEventListener('click', async e => {
+    e.stopPropagation()
+    const resolved = e.currentTarget.dataset.resolved === '1'
+    if (resolved) {
+      await fetch(`/api/comments/${comment.id}/reopen`, { method: 'PUT' })
+      comment.status = 'open'
+    } else {
+      await fetch(`/api/comments/${comment.id}/resolve`, { method: 'PUT' })
+      comment.status = 'resolved'
+    }
+    renderPins()
+    renderSidebar()
+  })
+  const replyTextarea = bubble.querySelector(`#replyText-${comment.id}`)
+  bubble.querySelector(`#replySend-${comment.id}`).addEventListener('click', async e => {
+    e.stopPropagation()
+    const text = replyTextarea.value.trim()
+    if (!text) { replyTextarea.focus(); return }
+    const author = getAuthor()
+    const res = await fetch(`/api/comments/${comment.id}/replies`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, author, is_team: true })
+    }).then(r => r.json())
+    if (!comment.replies) comment.replies = []
+    comment.replies.push(res)
+    replyTextarea.value = ''
+    renderPins()
+    renderSidebar()
+  })
+  replyTextarea.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) bubble.querySelector(`#replySend-${comment.id}`).click()
+    e.stopPropagation()
   })
   bubble.addEventListener('click', e => e.stopPropagation())
   canvasInner.appendChild(bubble)
@@ -630,17 +701,32 @@ function renderSidebar() {
     const comments = filteredComments(page.id)
     if (!comments.length && commentFilter !== 'all') return ''
     const isOpen = page.id === currentPageId
-    const listHtml = comments.map((c, idx) => `
-      <div class="comment-item${c.id === activePinId ? ' highlighted' : ''}" data-cid="${c.id}" data-pid="${page.id}">
-        <div class="ci-header">
-          <div class="ci-pin ${c.is_team ? 'team' : 'client'}">${idx + 1}</div>
-          <span class="ci-author">${esc(c.author)}</span>
-          <span class="tag ${c.is_team ? 'tag-team' : 'tag-client'}" style="font-size:10px;padding:1px 6px">${c.is_team ? 'Team' : 'Client'}</span>
-          <span class="ci-time">${relTime(c.created_at)}</span>
+    const listHtml = filteredComments(page.id).map((c, idx) => {
+      const replies = (c.replies || []).map(r => `
+        <div class="reply-item">
+          <div class="reply-header">
+            <span class="ci-author" style="font-size:11px">${esc(r.author)}</span>
+            <span class="tag ${r.is_team ? 'tag-team' : 'tag-client'}" style="font-size:9px;padding:1px 5px">${r.is_team ? 'Team' : 'Client'}</span>
+            <span class="ci-time">${relTime(r.created_at)}</span>
+          </div>
+          <div class="reply-text">${esc(r.text)}</div>
         </div>
-        <div class="ci-text">${esc(c.text)}</div>
-      </div>
-    `).join('')
+      `).join('')
+      const isResolved = c.status === 'resolved'
+      return `
+        <div class="comment-item${c.id === activePinId ? ' highlighted' : ''}${isResolved ? ' resolved' : ''}" data-cid="${c.id}" data-pid="${page.id}">
+          <div class="ci-header">
+            <div class="ci-pin ${c.is_team ? 'team' : 'client'}">${idx + 1}</div>
+            <span class="ci-author">${esc(c.author)}</span>
+            <span class="tag ${c.is_team ? 'tag-team' : 'tag-client'}" style="font-size:10px;padding:1px 6px">${c.is_team ? 'Team' : 'Client'}</span>
+            <span class="ci-time">${relTime(c.created_at)}</span>
+            ${isResolved ? '<span class="resolved-badge" style="margin-left:auto">✓</span>' : ''}
+          </div>
+          <div class="ci-text${isResolved ? ' resolved-text' : ''}">${esc(c.text)}</div>
+          ${replies}
+        </div>
+      `
+    }).join('')
 
     return `
       <div class="page-section" data-pid="${page.id}">
