@@ -22,8 +22,7 @@ const noPages      = document.getElementById('noPages')
 const sidebarScroll= document.getElementById('sidebarScroll')
 const addCommentBtn= document.getElementById('addCommentBtn')
 const commentBar   = document.getElementById('commentModeBar')
-const authorBackdrop = document.getElementById('authorBackdrop')
-const authorInput  = document.getElementById('authorInput')
+const clientPickerBackdrop = document.getElementById('clientPickerBackdrop')
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
@@ -35,8 +34,83 @@ function relTime(d) {
   if (h < 24) return `${h}h ago`
   return `${Math.floor(h / 24)}d ago`
 }
-function getAuthor() { return localStorage.getItem('iv_client_author') || '' }
-function setAuthor(name) { localStorage.setItem('iv_client_author', name) }
+function getAuthor() { return localStorage.getItem('iv_client_' + shareToken) || '' }
+function setAuthor(name) { localStorage.setItem('iv_client_' + shareToken, name) }
+
+// ── Client name picker ────────────────────────────────────────────────────────
+let _onNameConfirmed = null
+
+async function showClientPicker(onConfirm) {
+  _onNameConfirmed = onConfirm
+  clientPickerBackdrop.classList.remove('hidden')
+
+  const knownName = getAuthor()
+  const knownUserView = document.getElementById('knownUserView')
+  const chooseView = document.getElementById('chooseView')
+
+  if (knownName) {
+    // Already have a stored name — ask to confirm
+    knownUserView.classList.remove('hidden')
+    chooseView.style.display = 'none'
+    document.getElementById('knownUserMsg').textContent = `Vous êtes ${knownName} ?`
+
+    document.getElementById('knownUserOui').onclick = () => {
+      clientPickerBackdrop.classList.add('hidden')
+      onConfirm(knownName)
+    }
+    document.getElementById('knownUserNon').onclick = () => {
+      // Clear stored name and show full picker
+      localStorage.removeItem('iv_client_' + shareToken)
+      knownUserView.classList.add('hidden')
+      chooseView.style.display = ''
+      loadClientChips()
+    }
+  } else {
+    knownUserView.classList.add('hidden')
+    chooseView.style.display = ''
+    loadClientChips()
+  }
+}
+
+async function loadClientChips() {
+  const names = await fetch(`/api/share/${shareToken}/clients`).then(r => r.json()).catch(() => [])
+  const chipsEl = document.getElementById('clientChips')
+  chipsEl.innerHTML = ''
+
+  if (names.length) {
+    names.forEach(name => {
+      const chip = document.createElement('button')
+      chip.style.cssText = 'padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px;cursor:pointer;transition:all .15s;'
+      chip.textContent = name
+      chip.addEventListener('mouseenter', () => { chip.style.borderColor = 'var(--accent)'; chip.style.color = 'var(--accent)' })
+      chip.addEventListener('mouseleave', () => { chip.style.borderColor = 'var(--border)'; chip.style.color = 'var(--text)' })
+      chip.addEventListener('click', () => {
+        setAuthor(name)
+        clientPickerBackdrop.classList.add('hidden')
+        _onNameConfirmed && _onNameConfirmed(name)
+      })
+      chipsEl.appendChild(chip)
+    })
+  }
+
+  document.getElementById('newVisitorBtn').onclick = () => {
+    document.getElementById('newVisitorRow').style.display = 'none'
+    document.getElementById('newNameRow').classList.remove('hidden')
+    document.getElementById('newNameInput').focus()
+  }
+
+  document.getElementById('newNameConfirm').onclick = () => {
+    const name = document.getElementById('newNameInput').value.trim()
+    if (!name) { document.getElementById('newNameInput').focus(); return }
+    setAuthor(name)
+    clientPickerBackdrop.classList.add('hidden')
+    _onNameConfirmed && _onNameConfirmed(name)
+  }
+
+  document.getElementById('newNameInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('newNameConfirm').click()
+  })
+}
 
 // ── Load data ─────────────────────────────────────────────────────────────────
 async function init() {
@@ -60,6 +134,13 @@ async function init() {
   renderPageSelect()
   if (pages.length > 0) switchPage(pages[0].id)
   else noPages.classList.remove('hidden')
+
+  // Show client picker if no name stored
+  if (!getAuthor()) {
+    showClientPicker(name => {
+      // Name stored, user can now comment
+    })
+  }
 }
 
 // ── Page management ───────────────────────────────────────────────────────────
@@ -121,27 +202,11 @@ addCommentBtn.addEventListener('click', () => {
   else {
     const author = getAuthor()
     if (!author) {
-      authorInput.value = ''
-      authorBackdrop.classList.remove('hidden')
-      authorInput.focus()
+      showClientPicker(() => enterCommentMode())
     } else {
       enterCommentMode()
     }
   }
-})
-
-document.getElementById('authorConfirm').addEventListener('click', () => {
-  const name = authorInput.value.trim()
-  if (!name) { authorInput.focus(); return }
-  setAuthor(name)
-  authorBackdrop.classList.add('hidden')
-  enterCommentMode()
-})
-document.getElementById('authorCancel').addEventListener('click', () => {
-  authorBackdrop.classList.add('hidden')
-})
-authorInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('authorConfirm').click()
 })
 
 function enterCommentMode() {
@@ -219,10 +284,10 @@ function showNewCommentForm(x, y, anchor) {
 
   form.querySelector('#changeAuthor').addEventListener('click', e => {
     e.stopPropagation()
-    authorInput.value = getAuthor()
-    authorBackdrop.classList.remove('hidden')
-    authorInput.focus()
     cancelCommentMode()
+    // Reset stored name so picker shows full selection
+    localStorage.removeItem('iv_client_' + shareToken)
+    showClientPicker(name => enterCommentMode())
   })
   form.querySelector('#ncCancel').addEventListener('click', e => {
     e.stopPropagation()

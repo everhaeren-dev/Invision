@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InVision — Connexion</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg); }
+    .auth-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 40px; width: 360px; }
+    .auth-logo { font-size: 24px; font-weight: 800; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 28px; display: block; }
+    .auth-title { font-size: 20px; font-weight: 700; margin-bottom: 24px; }
+    .auth-field { margin-bottom: 16px; }
+    .auth-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+    .auth-field input { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); font-size: 14px; outline: none; }
+    .auth-field input:focus { border-color: var(--accent); }
+    .auth-btn { width: 100%; padding: 11px; border-radius: 8px; border: none; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: background .15s; }
+    .auth-btn:hover { background: #ff5580; }
+    .auth-links { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; text-align: center; }
+    .auth-links a { font-size: 13px; color: var(--text2); text-decoration: none; }
+    .auth-links a:hover { color: var(--text); }
+    .auth-error { background: #ff3b6b22; border: 1px solid var(--accent); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--accent); margin-bottom: 16px; }
+    .auth-success { background: #2ecc7122; border: 1px solid var(--green); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--green); margin-bottom: 16px; }
+    .forgot-form { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); display: none; }
+    .forgot-form.visible { display: block; }
+    .reset-link-box { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--text2); word-break: break-all; margin-top: 10px; }
+  </style>
+</head>
+<body>
+<div class="auth-card">
+  <span class="auth-logo">InVision</span>
+  <div class="auth-title">Connexion</div>
+
+  <div id="authMsg"></div>
+
+  <form method="POST" action="/auth/login">
+    <div class="auth-field">
+      <label>Email</label>
+      <input type="email" name="email" required autocomplete="email" autofocus>
+    </div>
+    <div class="auth-field">
+      <label>Mot de passe</label>
+      <input type="password" name="password" required autocomplete="current-password">
+    </div>
+    <button type="submit" class="auth-btn">Se connecter</button>
+  </form>
+
+  <div class="auth-links">
+    <a href="#" id="forgotLink">Mot de passe oublié ?</a>
+    <a href="/register">Créer un compte →</a>
+  </div>
+
+  <div class="forgot-form" id="forgotForm">
+    <div class="auth-field">
+      <label>Email du compte</label>
+      <input type="email" id="forgotEmail" placeholder="email@agence.com">
+    </div>
+    <button class="auth-btn" id="forgotBtn" style="background:var(--accent2)">Générer un lien de reset</button>
+    <div id="resetResult"></div>
+  </div>
+</div>
+
+<script>
+  const params = new URLSearchParams(location.search)
+  const msg = document.getElementById('authMsg')
+  if (params.get('error') === 'invalid') msg.innerHTML = '<div class="auth-error">Email ou mot de passe incorrect.</div>'
+  if (params.get('error') === 'missing') msg.innerHTML = '<div class="auth-error">Tous les champs sont requis.</div>'
+  if (params.get('registered')) msg.innerHTML = '<div class="auth-success">Compte créé ! Connectez-vous.</div>'
+  if (params.get('reset')) msg.innerHTML = '<div class="auth-success">Mot de passe réinitialisé !</div>'
+
+  document.getElementById('forgotLink').addEventListener('click', e => {
+    e.preventDefault()
+    document.getElementById('forgotForm').classList.toggle('visible')
+  })
+
+  document.getElementById('forgotBtn').addEventListener('click', async () => {
+    const email = document.getElementById('forgotEmail').value.trim()
+    if (!email) return
+    const res = await fetch('/auth/forgot', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    }).then(r => r.json())
+    const div = document.getElementById('resetResult')
+    if (res.reset_link) {
+      div.innerHTML = `<div style="margin-top:10px;font-size:12px;color:var(--text2)">Lien de réinitialisation (valable 1h) :</div><div class="reset-link-box">${res.reset_link}</div>`
+    } else {
+      div.innerHTML = '<div style="margin-top:10px;font-size:12px;color:var(--text2)">Si ce compte existe, un lien a été généré.</div>'
+    }
+  })
+</script>
+</body>
+</html>

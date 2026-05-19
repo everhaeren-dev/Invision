@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InVision — Réinitialisation</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg); }
+    .auth-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 40px; width: 360px; }
+    .auth-logo { font-size: 24px; font-weight: 800; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 28px; display: block; }
+    .auth-title { font-size: 20px; font-weight: 700; margin-bottom: 24px; }
+    .auth-field { margin-bottom: 16px; }
+    .auth-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+    .auth-field input { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); font-size: 14px; outline: none; }
+    .auth-field input:focus { border-color: var(--accent); }
+    .auth-btn { width: 100%; padding: 11px; border-radius: 8px; border: none; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+    .auth-error { background: #ff3b6b22; border: 1px solid var(--accent); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--accent); margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+<div class="auth-card">
+  <span class="auth-logo">InVision</span>
+  <div class="auth-title">Nouveau mot de passe</div>
+  <div id="authMsg"></div>
+  <form id="resetForm">
+    <div class="auth-field">
+      <label>Nouveau mot de passe</label>
+      <input type="password" id="password" required minlength="8" autofocus placeholder="8 caractères minimum">
+    </div>
+    <div class="auth-field">
+      <label>Confirmer</label>
+      <input type="password" id="confirm" required minlength="8" placeholder="Répétez le mot de passe">
+    </div>
+    <button type="submit" class="auth-btn">Réinitialiser</button>
+  </form>
+</div>
+<script>
+  const token = location.pathname.split('/').pop()
+  const params = new URLSearchParams(location.search)
+  const msg = document.getElementById('authMsg')
+  if (params.get('error') === 'invalid') msg.innerHTML = '<div class="auth-error">Lien invalide ou expiré.</div>'
+  if (params.get('error') === 'expired') msg.innerHTML = '<div class="auth-error">Ce lien a expiré. Demandez-en un nouveau.</div>'
+  if (params.get('error') === 'missing') msg.innerHTML = '<div class="auth-error">Mot de passe requis.</div>'
+
+  document.getElementById('resetForm').addEventListener('submit', e => {
+    e.preventDefault()
+    const pw = document.getElementById('password').value
+    const cf = document.getElementById('confirm').value
+    if (pw !== cf) { msg.innerHTML = '<div class="auth-error">Les mots de passe ne correspondent pas.</div>'; return }
+    const form = document.createElement('form')
+    form.method = 'POST'
+    form.action = `/auth/reset/${token}`
+    const inp = document.createElement('input')
+    inp.type = 'hidden'; inp.name = 'password'; inp.value = pw
+    form.appendChild(inp)
+    document.body.appendChild(form)
+    form.submit()
+  })
+</script>
+</body>
+</html>

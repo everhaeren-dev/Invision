@@ -7,7 +7,15 @@ fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true })
 
 function load() {
   try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) }
-  catch { return { projects: [], pages: [], comments: [], seq: { projects: 0, pages: 0, comments: 0 } } }
+  catch {
+    return {
+      projects: [],
+      pages: [],
+      comments: [],
+      users: [],
+      seq: { projects: 0, pages: 0, comments: 0, users: 0 }
+    }
+  }
 }
 
 function save(data) {
@@ -22,10 +30,11 @@ function nextId(data, table) {
 function now() { return new Date().toISOString() }
 
 module.exports = {
+  // ── Projects ──────────────────────────────────────────────────────────────
   getProjects: () => {
     const db = load()
     return db.projects.slice().reverse().map(p => {
-      const pages = db.pages.filter(pg => pg.project_id === p.id)
+      const pages = db.pages.filter(pg => pg.project_id === p.id && !pg.is_archived)
       const first = pages.sort((a,b) => a.sort_order - b.sort_order)[0]
       return { ...p, page_count: pages.length, first_page: first?.filename || null, first_page_id: first?.id || null }
     })
@@ -59,10 +68,11 @@ module.exports = {
     save(db)
   },
 
+  // ── Pages ─────────────────────────────────────────────────────────────────
   getPages: (projectId) => {
     const db = load()
     return db.pages
-      .filter(p => p.project_id === Number(projectId))
+      .filter(p => p.project_id === Number(projectId) && !p.is_archived)
       .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)
   },
 
@@ -71,12 +81,50 @@ module.exports = {
     return db.pages.find(p => p.id === Number(id)) || null
   },
 
-  createPage: (projectId, name, filename, isRetina, order) => {
+  createPage: (projectId, name, filename, isRetina, order, originalFilename, version) => {
     const db = load()
-    const p = { id: nextId(db, 'pages'), project_id: Number(projectId), name, filename, is_retina: isRetina ? 1 : 0, sort_order: order, created_at: now() }
+    const p = {
+      id: nextId(db, 'pages'),
+      project_id: Number(projectId),
+      name,
+      filename,
+      is_retina: isRetina ? 1 : 0,
+      sort_order: order,
+      is_archived: 0,
+      archived_at: null,
+      original_filename: originalFilename || filename,
+      version: version || 1,
+      created_at: now()
+    }
     db.pages.push(p)
     save(db)
     return p
+  },
+
+  archivePage: (id) => {
+    const db = load()
+    const p = db.pages.find(p => p.id === Number(id))
+    if (p) {
+      p.is_archived = 1
+      p.archived_at = now()
+    }
+    save(db)
+  },
+
+  getPageByOriginalFilename: (projectId, originalFilename) => {
+    const db = load()
+    return db.pages.find(
+      p => p.project_id === Number(projectId) &&
+           !p.is_archived &&
+           p.original_filename === originalFilename
+    ) || null
+  },
+
+  getArchivedPages: (projectId) => {
+    const db = load()
+    return db.pages
+      .filter(p => p.project_id === Number(projectId) && p.is_archived)
+      .sort((a, b) => new Date(b.archived_at) - new Date(a.archived_at))
   },
 
   deletePage: (id) => {
@@ -103,6 +151,7 @@ module.exports = {
     save(db)
   },
 
+  // ── Comments ──────────────────────────────────────────────────────────────
   getComments: (pageId, teamOnly = null) => {
     const db = load()
     let cs = db.comments.filter(c => c.page_id === Number(pageId))
@@ -128,5 +177,65 @@ module.exports = {
   getComment: (id) => {
     const db = load()
     return db.comments.find(c => c.id === Number(id)) || null
+  },
+
+  // ── Users ─────────────────────────────────────────────────────────────────
+  getUsers: () => {
+    const db = load()
+    return db.users || []
+  },
+
+  getUserByEmail: (email) => {
+    const db = load()
+    return (db.users || []).find(u => u.email === email) || null
+  },
+
+  getUserById: (id) => {
+    const db = load()
+    return (db.users || []).find(u => u.id === Number(id)) || null
+  },
+
+  createUser: (email, name, passwordHash) => {
+    const db = load()
+    if (!db.users) db.users = []
+    if (!db.seq) db.seq = {}
+    const u = {
+      id: nextId(db, 'users'),
+      email,
+      name,
+      password_hash: passwordHash,
+      reset_token: null,
+      reset_expires: null,
+      created_at: now()
+    }
+    db.users.push(u)
+    save(db)
+    return u
+  },
+
+  updatePassword: (id, hash) => {
+    const db = load()
+    const u = (db.users || []).find(u => u.id === Number(id))
+    if (u) {
+      u.password_hash = hash
+      u.reset_token = null
+      u.reset_expires = null
+    }
+    save(db)
+  },
+
+  saveResetToken: (id, token, expires) => {
+    const db = load()
+    const u = (db.users || []).find(u => u.id === Number(id))
+    if (u) {
+      u.reset_token = token
+      u.reset_expires = expires
+    }
+    save(db)
+  },
+
+  getUserByResetToken: (token) => {
+    const db = load()
+    return (db.users || []).find(u => u.reset_token === token) || null
   },
 }

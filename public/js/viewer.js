@@ -2,14 +2,16 @@
 const projectId   = location.pathname.split('/').pop()
 let project       = null
 let pages         = []
+let archivedPages = []
 let allComments   = {}   // pageId → [comments]
 let currentPageId = null
 let commentMode   = false
 let pendingPin    = null
 let activePinId   = null
-let commentFilter = 'all'
+let commentFilter = 'all'   // 'all' | 'team' | 'client' | 'archive'
 let viewMode      = 'screens'   // 'screens' | 'viewer'
 let dragCounter   = 0
+let archivedPageView = null  // pageId of archived page being viewed
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const projectName  = document.getElementById('projectName')
@@ -44,12 +46,14 @@ function getAuthor() { return localStorage.getItem('iv_team_author') || 'Team' }
 
 // ── Load data ─────────────────────────────────────────────────────────────────
 async function init() {
-  const [projRes, pagesRes] = await Promise.all([
+  const [projRes, pagesRes, archivedRes] = await Promise.all([
     fetch(`/api/projects/${projectId}`).then(r => r.json()),
-    fetch(`/api/projects/${projectId}/pages`).then(r => r.json())
+    fetch(`/api/projects/${projectId}/pages`).then(r => r.json()),
+    fetch(`/api/projects/${projectId}/archived`).then(r => r.json())
   ])
   project = projRes
   pages = pagesRes
+  archivedPages = archivedRes
   projectName.textContent = project.name
   document.title = `${project.name} — InVision`
   await loadAllComments()
@@ -105,7 +109,48 @@ function showScreensView() {
   }).join('')
 
   grid.querySelectorAll('.screen-card').forEach(card => {
-    card.addEventListener('click', () => enterViewerMode(Number(card.dataset.pid)))
+    card.addEventListener('click', e => {
+      // Don't navigate if clicking on a renaming input
+      if (e.target.tagName === 'INPUT') return
+      enterViewerMode(Number(card.dataset.pid))
+    })
+    card.querySelector('.screen-name').addEventListener('dblclick', e => {
+      e.stopPropagation()
+      const nameEl = card.querySelector('.screen-name')
+      const pid = Number(card.dataset.pid)
+      const page = pages.find(p => p.id === pid)
+      if (!page) return
+
+      const input = document.createElement('input')
+      input.type = 'text'
+      input.value = page.name
+      input.className = 'screen-name-input'
+      input.style.cssText = 'width:100%;background:var(--bg3);border:1px solid var(--accent);border-radius:4px;color:var(--text);font-size:13px;font-weight:600;padding:2px 6px;outline:none;font-family:inherit;'
+      nameEl.replaceWith(input)
+      input.select()
+      input.focus()
+
+      const save = async () => {
+        const newName = input.value.trim()
+        if (newName && newName !== page.name) {
+          page.name = newName
+          await fetch(`/api/pages/${pid}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName })
+          })
+        }
+        showScreensView()
+      }
+      input.addEventListener('blur', save)
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur() }
+        if (e.key === 'Escape') {
+          input.value = page.name
+          input.blur()
+        }
+        e.stopPropagation()
+      })
+    })
   })
 }
 
@@ -557,8 +602,39 @@ document.querySelectorAll('.filter-tab').forEach(tab => {
     document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'))
     tab.classList.add('active')
     commentFilter = tab.dataset.filter
-    renderPins()
-    renderSidebar()
+    archivedPageView = null
+
+    if (commentFilter === 'archive') {
+      // Show archive sidebar, hide comment pins
+      canvasInner.querySelectorAll('.pin, .comment-bubble, .pending-pin').forEach(el => el.remove())
+      canvasInner.querySelector('.archive-overlay')?.remove()
+      addCommentBtn.style.display = 'none'
+      renderArchiveSidebar()
+    } else {
+      // Restore normal view
+      addCommentBtn.style.display = viewMode === 'viewer' ? 'flex' : 'none'
+      if (viewMode === 'viewer') {
+        // Remove archive overlay if present
+        canvasInner.querySelector('.archive-overlay')?.remove()
+        // Restore the current page image if it was changed to archived
+        const page = pages.find(p => p.id === currentPageId)
+        if (page) {
+          canvasImg.src = `/uploads/${project.id}/${page.filename}`
+          canvasImg.onload = () => {
+            if (page.is_retina) {
+              canvasImg.style.width  = (canvasImg.naturalWidth  / 2) + 'px'
+              canvasImg.style.height = (canvasImg.naturalHeight / 2) + 'px'
+            } else {
+              canvasImg.style.width  = ''
+              canvasImg.style.height = ''
+            }
+            renderPins()
+          }
+        }
+      }
+      renderPins()
+      renderSidebar()
+    }
   })
 })
 
@@ -580,6 +656,14 @@ async function uploadFiles(files) {
     pages = res.pages
     for (const p of pages) { if (!allComments[p.id]) allComments[p.id] = [] }
     await loadAllComments()
+
+    // Refresh archived pages list
+    archivedPages = await fetch(`/api/projects/${projectId}/archived`).then(r => r.json())
+
+    // Show archive toast if pages were archived
+    if (res.archived && res.archived.length) {
+      showToastMessage(`${res.archived.length} page${res.archived.length > 1 ? 's' : ''} archivée${res.archived.length > 1 ? 's' : ''} (remplacée${res.archived.length > 1 ? 's' : ''} par nouvelle version)`)
+    }
 
     if (viewMode === 'screens') {
       showScreensView()
@@ -612,6 +696,83 @@ document.addEventListener('drop', e => {
   e.preventDefault(); dragCounter = 0; dropOverlay.classList.add('hidden')
   uploadFiles([...e.dataTransfer.files].filter(f => /\.(jpe?g|png|gif|webp)$/i.test(f.name)))
 })
+
+// ── Toast helper ──────────────────────────────────────────────────────────────
+function showToastMessage(msg) {
+  const existing = document.getElementById('genericToast')
+  if (existing) existing.remove()
+  const t = document.createElement('div')
+  t.id = 'genericToast'
+  t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 18px;font-size:13px;color:var(--text);z-index:200;box-shadow:0 4px 20px #0008;white-space:nowrap;'
+  t.textContent = msg
+  document.body.appendChild(t)
+  setTimeout(() => t.remove(), 4000)
+}
+
+// ── Archive view ───────────────────────────────────────────────────────────────
+function renderArchiveSidebar() {
+  if (!archivedPages.length) {
+    sidebarScroll.innerHTML = '<div class="sidebar-empty">Aucune page archivée.</div>'
+    return
+  }
+  sidebarScroll.innerHTML = archivedPages.map(p => `
+    <div class="archive-item" data-pid="${p.id}" style="padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <img src="/uploads/${project.id}/${p.filename}" style="width:48px;height:36px;object-fit:cover;border-radius:4px;border:1px solid var(--border);" alt="">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}</div>
+          <div style="font-size:11px;color:var(--text2);">v${p.version || 1} · archivée ${relTime(p.archived_at)}</div>
+        </div>
+      </div>
+    </div>
+  `).join('')
+
+  sidebarScroll.querySelectorAll('.archive-item').forEach(item => {
+    item.addEventListener('mouseenter', () => item.style.background = 'var(--bg3)')
+    item.addEventListener('mouseleave', () => item.style.background = '')
+    item.addEventListener('click', () => {
+      const pid = Number(item.dataset.pid)
+      showArchivedPage(pid)
+    })
+  })
+}
+
+function showArchivedPage(pageId) {
+  archivedPageView = pageId
+  const page = archivedPages.find(p => p.id === pageId)
+  if (!page) return
+
+  // Switch to viewer mode display if not already
+  screensView.style.display = 'none'
+  viewerBody.style.display = 'flex'
+  addCommentBtn.style.display = 'none'
+  bottomBar.style.display = 'none'
+
+  canvasInner.classList.remove('hidden')
+  // Remove existing archive overlay
+  canvasInner.querySelector('.archive-overlay')?.remove()
+
+  canvasImg.src = `/uploads/${project.id}/${page.filename}`
+  canvasImg.onload = () => {
+    if (page.is_retina) {
+      canvasImg.style.width  = (canvasImg.naturalWidth  / 2) + 'px'
+      canvasImg.style.height = (canvasImg.naturalHeight / 2) + 'px'
+    } else {
+      canvasImg.style.width  = ''
+      canvasImg.style.height = ''
+    }
+    // Add archive overlay
+    const overlay = document.createElement('div')
+    overlay.className = 'archive-overlay'
+    overlay.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:10;'
+    overlay.innerHTML = '<div style="background:rgba(0,0,0,0.7);color:#aaa;font-size:24px;font-weight:800;letter-spacing:4px;padding:12px 32px;border-radius:8px;border:2px solid #555;">ARCHIVÉ</div>'
+    canvasInner.appendChild(overlay)
+  }
+
+  retinaBadge.classList.add('hidden')
+  // Clear pins (archived page is read-only)
+  canvasInner.querySelectorAll('.pin, .comment-bubble, .pending-pin').forEach(el => el.remove())
+}
 
 // ── Share ─────────────────────────────────────────────────────────────────────
 document.getElementById('shareBtn').addEventListener('click', () => {

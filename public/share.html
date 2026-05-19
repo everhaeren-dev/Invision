@@ -70,15 +70,28 @@
   <button id="cancelCommentMode">Cancel (Esc)</button>
 </div>
 
-<!-- Author name modal (first time) -->
-<div class="modal-backdrop hidden" id="authorBackdrop">
-  <div class="author-modal">
-    <h3>Leave a comment</h3>
-    <p>What's your name? This will appear with your comments.</p>
-    <input type="text" id="authorInput" placeholder="Your name" class="nc-input" style="width:100%;margin-bottom:16px">
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="authorCancel">Cancel</button>
-      <button class="btn btn-primary" id="authorConfirm">Continue</button>
+<!-- Client name picker modal -->
+<div class="modal-backdrop hidden" id="clientPickerBackdrop">
+  <div class="author-modal" id="clientPickerModal">
+    <h3 style="margin-bottom:14px;">Bonjour ! Qui êtes-vous ?</h3>
+    <!-- "Known user" view -->
+    <div id="knownUserView" class="hidden">
+      <p id="knownUserMsg" style="font-size:14px;margin-bottom:18px;"></p>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-primary" id="knownUserOui" style="flex:1;">Oui, c'est moi !</button>
+        <button class="btn btn-ghost" id="knownUserNon" style="flex:1;">Ce n'est pas moi</button>
+      </div>
+    </div>
+    <!-- "Choose / new" view -->
+    <div id="chooseView">
+      <div id="clientChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;"></div>
+      <div id="newVisitorRow" style="margin-bottom:14px;">
+        <button class="btn btn-ghost" id="newVisitorBtn" style="width:100%;">Nouveau visiteur</button>
+      </div>
+      <div id="newNameRow" class="hidden" style="margin-bottom:14px;">
+        <input type="text" id="newNameInput" placeholder="Votre prénom…" class="nc-input" style="width:100%;margin-bottom:10px;">
+        <button class="btn btn-primary" id="newNameConfirm" style="width:100%;">Confirmer</button>
+      </div>
     </div>
   </div>
 </div>

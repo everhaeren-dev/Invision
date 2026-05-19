@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InVision — Créer un compte</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg); }
+    .auth-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 40px; width: 360px; }
+    .auth-logo { font-size: 24px; font-weight: 800; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 28px; display: block; }
+    .auth-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .auth-sub { font-size: 13px; color: var(--text2); margin-bottom: 24px; }
+    .auth-field { margin-bottom: 16px; }
+    .auth-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+    .auth-field input { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); font-size: 14px; outline: none; }
+    .auth-field input:focus { border-color: var(--accent); }
+    .auth-btn { width: 100%; padding: 11px; border-radius: 8px; border: none; background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: background .15s; }
+    .auth-btn:hover { background: #ff5580; }
+    .auth-links { margin-top: 20px; text-align: center; }
+    .auth-links a { font-size: 13px; color: var(--text2); text-decoration: none; }
+    .auth-links a:hover { color: var(--text); }
+    .auth-error { background: #ff3b6b22; border: 1px solid var(--accent); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--accent); margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+<div class="auth-card">
+  <span class="auth-logo">InVision</span>
+  <div class="auth-title">Créer un compte</div>
+  <div class="auth-sub">Compte équipe — accès complet à tous les projets.</div>
+
+  <div id="authMsg"></div>
+
+  <form method="POST" action="/auth/register">
+    <div class="auth-field">
+      <label>Votre nom</label>
+      <input type="text" name="name" required autocomplete="name" autofocus placeholder="Marie Dupont">
+    </div>
+    <div class="auth-field">
+      <label>Email</label>
+      <input type="email" name="email" required autocomplete="email" placeholder="marie@agence.com">
+    </div>
+    <div class="auth-field">
+      <label>Mot de passe</label>
+      <input type="password" name="password" required autocomplete="new-password" minlength="8" placeholder="8 caractères minimum">
+    </div>
+    <button type="submit" class="auth-btn">Créer le compte</button>
+  </form>
+
+  <div class="auth-links">
+    <a href="/login">← Déjà un compte ? Se connecter</a>
+  </div>
+</div>
+
+<script>
+  const params = new URLSearchParams(location.search)
+  const msg = document.getElementById('authMsg')
+  if (params.get('error') === 'exists') msg.innerHTML = '<div class="auth-error">Cet email est déjà utilisé.</div>'
+  if (params.get('error') === 'missing') msg.innerHTML = '<div class="auth-error">Tous les champs sont requis.</div>'
+</script>
+</body>
+</html>
