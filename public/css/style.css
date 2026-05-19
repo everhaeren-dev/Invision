@@ -71,10 +71,33 @@ input, textarea { font-family: inherit; }
 .project-card {
   background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
   overflow: hidden; cursor: pointer; transition: all .2s;
-  text-decoration: none; display: flex; flex-direction: column;
+  text-decoration: none; display: flex; flex-direction: column; position: relative;
 }
 .project-card:hover { border-color: var(--accent); transform: translateY(-2px);
   box-shadow: 0 8px 32px #ff3b6b22; }
+
+.card-menu-btn {
+  position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.55);
+  border: none; color: #fff; border-radius: 6px; width: 28px; height: 28px;
+  font-size: 16px; display: none; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 2; transition: background .15s; line-height: 1;
+}
+.project-card:hover .card-menu-btn { display: flex; }
+.card-menu-btn:hover { background: var(--accent); }
+
+.card-dropdown {
+  position: absolute; top: 40px; right: 8px; background: var(--bg2);
+  border: 1px solid var(--border); border-radius: 8px; z-index: 50;
+  box-shadow: 0 8px 24px #0008; min-width: 140px; overflow: hidden;
+}
+.card-dropdown button {
+  display: block; width: 100%; padding: 10px 14px; text-align: left;
+  background: transparent; border: none; color: var(--text); font-size: 13px;
+  cursor: pointer;
+}
+.card-dropdown button:hover { background: var(--bg3); }
+.card-dropdown button.danger { color: #ff6b6b; }
+.card-dropdown button.danger:hover { background: #ff3b6b22; }
 
 .project-thumb {
   width: 100%; height: 160px; background: var(--bg3); overflow: hidden;
@@ -159,7 +182,7 @@ input, textarea { font-family: inherit; }
   align-items: flex-start; justify-content: flex-start; position: relative;
   cursor: crosshair;
 }
-.canvas-area.fit-mode { align-items: center; justify-content: center; overflow: hidden; }
+.canvas-area.fit-mode { align-items: flex-start; justify-content: flex-start; overflow-y: auto; overflow-x: hidden; }
 .canvas-area.comment-mode { cursor: crosshair; }
 .canvas-area.default-mode { cursor: default; }
 
@@ -168,14 +191,14 @@ input, textarea { font-family: inherit; }
   margin: 32px;
 }
 .canvas-area.fit-mode .canvas-inner {
-  margin: 0; max-width: 100%; max-height: 100%;
+  margin: 0; width: 100%; display: block;
 }
 
 .canvas-img {
   display: block; max-width: 100%; height: auto; user-select: none;
   border: 1px solid var(--border);
 }
-.canvas-area.fit-mode .canvas-img { max-width: 100%; max-height: 100%; }
+.canvas-area.fit-mode .canvas-img { width: 100% !important; height: auto !important; max-height: none; }
 
 /* ── Comment pins ─────────────────────────────────────────── */
 .pin {
@@ -325,8 +348,17 @@ input, textarea { font-family: inherit; }
 
 .strip-item {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
-  flex-shrink: 0; cursor: pointer; width: 90px;
+  flex-shrink: 0; cursor: pointer; width: 90px; position: relative;
 }
+.strip-delete-btn {
+  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px;
+  background: rgba(0,0,0,.7); border: none; color: #fff; border-radius: 50%;
+  font-size: 11px; display: none; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 3; line-height: 1;
+}
+.strip-item:hover .strip-delete-btn { display: flex; }
+.strip-delete-btn:hover { background: var(--accent); }
+
 .strip-thumb {
   width: 90px; height: 64px; border-radius: 6px; overflow: hidden;
   border: 2px solid transparent; background: var(--bg3);

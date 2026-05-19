@@ -147,12 +147,30 @@ function renderBottomBar() {
       <div class="strip-thumb">
         <img src="/uploads/${project.id}/${p.filename}" alt="" draggable="false">
       </div>
+      <button class="strip-delete-btn" title="Delete page">&times;</button>
       <input class="strip-name" data-pid="${p.id}" value="${esc(p.name)}" title="Click to rename">
     </div>
   `).join('')
 
   bottomBar.querySelectorAll('.strip-item').forEach(item => {
     item.querySelector('.strip-thumb').addEventListener('click', () => switchPage(Number(item.dataset.pid)))
+    item.querySelector('.strip-delete-btn').addEventListener('click', async e => {
+      e.stopPropagation()
+      const pid = Number(item.dataset.pid)
+      const page = pages.find(p => p.id === pid)
+      if (!confirm(`Delete page "${page?.name}"?\nThis will remove the image and all its comments.`)) return
+      await fetch(`/api/pages/${pid}`, { method: 'DELETE' })
+      pages = pages.filter(p => p.id !== pid)
+      delete allComments[pid]
+      if (currentPageId === pid) {
+        if (pages.length) switchPage(pages[0].id)
+        else { showScreensView() }
+      } else {
+        renderBottomBar()
+        renderPageSelect()
+        renderSidebar()
+      }
+    })
   })
 
   bottomBar.querySelectorAll('.strip-name').forEach(input => {
