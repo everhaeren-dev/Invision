@@ -46,7 +46,10 @@
   <div id="screensView" class="screens-view" style="display:none">
     <div class="screens-header">
       <h1 id="screensTitle"></h1>
-      <p class="screens-subtitle" id="screensSubtitle"></p>
+      <nav class="screens-tabs">
+        <button class="screens-tab active" data-tab="screens">Screens</button>
+        <button class="screens-tab" data-tab="archives">Archives</button>
+      </nav>
     </div>
     <div class="screens-grid" id="screensGrid"></div>
     <div class="no-pages hidden" id="noPagesScreens" style="position:static;flex:none;margin-top:60px">
@@ -71,7 +74,6 @@
           <button class="filter-tab active" data-filter="all">All</button>
           <button class="filter-tab" data-filter="team">Team</button>
           <button class="filter-tab" data-filter="client">Client</button>
-          <button class="filter-tab" data-filter="archive" style="color:var(--text2)">Archive</button>
         </div>
       </div>
       <div class="sidebar-scroll" id="sidebarScroll"></div>

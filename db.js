@@ -113,10 +113,14 @@ module.exports = {
 
   getPageByOriginalFilename: (projectId, originalFilename) => {
     const db = load()
+    const ext = path.extname(originalFilename)
+    const base = path.basename(originalFilename, ext)
+    const sanitized = base.replace(/[^a-zA-Z0-9@._-]/g, '_') + ext
     return db.pages.find(
       p => p.project_id === Number(projectId) &&
            !p.is_archived &&
-           p.original_filename === originalFilename
+           (p.original_filename === originalFilename ||
+            (!p.original_filename && p.filename === sanitized))
     ) || null
   },
 

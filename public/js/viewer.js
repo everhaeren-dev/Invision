@@ -12,6 +12,7 @@ let commentFilter = 'all'   // 'all' | 'team' | 'client' | 'archive'
 let viewMode      = 'screens'   // 'screens' | 'viewer'
 let dragCounter   = 0
 let archivedPageView = null  // pageId of archived page being viewed
+let screensTab = 'screens'  // 'screens' | 'archives'
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const projectName  = document.getElementById('projectName')
@@ -84,15 +85,26 @@ function showScreensView() {
   addCommentBtn.style.display = 'none'
   cancelCommentMode()
 
-  // Title
   document.getElementById('screensTitle').textContent = project.name
-  const total = Object.values(allComments).reduce((s, c) => s + c.length, 0)
-  document.getElementById('screensSubtitle').textContent =
-    `${pages.length} page${pages.length !== 1 ? 's' : ''}${total ? ` · ${total} comment${total !== 1 ? 's' : ''}` : ''}`
 
-  document.getElementById('noPagesScreens').classList.toggle('hidden', pages.length > 0)
+  // Tabs
+  document.querySelectorAll('.screens-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.tab === screensTab)
+    tab.onclick = () => { screensTab = tab.dataset.tab; showScreensView() }
+  })
 
   const grid = document.getElementById('screensGrid')
+
+  if (screensTab === 'archives') {
+    renderArchivesGrid(grid)
+  } else {
+    renderScreensGrid(grid)
+  }
+}
+
+function renderScreensGrid(grid) {
+  document.getElementById('noPagesScreens').classList.toggle('hidden', pages.length > 0)
+
   grid.innerHTML = pages.map(p => {
     const count = (allComments[p.id] || []).length
     return `
@@ -104,53 +116,139 @@ function showScreensView() {
           <div class="screen-name">${esc(p.name)}${p.is_retina ? ' <span class="tag tag-client" style="font-size:10px;padding:1px 6px">@2x</span>' : ''}</div>
           <div class="screen-count">${count ? `${count} comment${count !== 1 ? 's' : ''}` : 'No comments'}</div>
         </div>
+        <div class="screen-menu">
+          <button class="screen-menu-btn" title="Options">⋮</button>
+          <div class="screen-dropdown hidden">
+            <button data-action="archive">Archive</button>
+            <button data-action="delete" class="danger">Delete</button>
+          </div>
+        </div>
       </div>
     `
   }).join('')
 
+  // Close all dropdowns on outside click
+  document.addEventListener('click', () => {
+    grid.querySelectorAll('.screen-dropdown').forEach(d => d.classList.add('hidden'))
+  }, { capture: false, once: false })
+
   grid.querySelectorAll('.screen-card').forEach(card => {
-    card.addEventListener('click', e => {
-      // Don't navigate if clicking on a renaming input
-      if (e.target.tagName === 'INPUT') return
-      enterViewerMode(Number(card.dataset.pid))
-    })
-    card.querySelector('.screen-name').addEventListener('dblclick', e => {
+    const pid = Number(card.dataset.pid)
+    let _clickTimer = null
+
+    // ⋮ menu toggle
+    const menuBtn = card.querySelector('.screen-menu-btn')
+    const dropdown = card.querySelector('.screen-dropdown')
+    menuBtn.addEventListener('click', e => {
       e.stopPropagation()
-      const nameEl = card.querySelector('.screen-name')
-      const pid = Number(card.dataset.pid)
+      const wasHidden = dropdown.classList.contains('hidden')
+      grid.querySelectorAll('.screen-dropdown').forEach(d => d.classList.add('hidden'))
+      if (wasHidden) dropdown.classList.remove('hidden')
+    })
+
+    // Archive action
+    dropdown.querySelector('[data-action="archive"]').addEventListener('click', async e => {
+      e.stopPropagation()
+      dropdown.classList.add('hidden')
       const page = pages.find(p => p.id === pid)
       if (!page) return
-
-      const input = document.createElement('input')
-      input.type = 'text'
-      input.value = page.name
-      input.className = 'screen-name-input'
-      input.style.cssText = 'width:100%;background:var(--bg3);border:1px solid var(--accent);border-radius:4px;color:var(--text);font-size:13px;font-weight:600;padding:2px 6px;outline:none;font-family:inherit;'
-      nameEl.replaceWith(input)
-      input.select()
-      input.focus()
-
-      const save = async () => {
-        const newName = input.value.trim()
-        if (newName && newName !== page.name) {
-          page.name = newName
-          await fetch(`/api/pages/${pid}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: newName })
-          })
-        }
-        showScreensView()
-      }
-      input.addEventListener('blur', save)
-      input.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); input.blur() }
-        if (e.key === 'Escape') {
-          input.value = page.name
-          input.blur()
-        }
-        e.stopPropagation()
-      })
+      if (!confirm(`Archiver "${page.name}" ?\nLa page sera archivée avec tous ses commentaires.`)) return
+      await fetch(`/api/pages/${pid}/archive`, { method: 'PUT' })
+      pages = pages.filter(p => p.id !== pid)
+      delete allComments[pid]
+      archivedPages = await fetch(`/api/projects/${projectId}/archived`).then(r => r.json())
+      showScreensView()
     })
+
+    // Delete action
+    dropdown.querySelector('[data-action="delete"]').addEventListener('click', async e => {
+      e.stopPropagation()
+      dropdown.classList.add('hidden')
+      const page = pages.find(p => p.id === pid)
+      if (!page) return
+      if (!confirm(`Supprimer définitivement "${page.name}" ?\nL'image et tous ses commentaires seront supprimés.`)) return
+      await fetch(`/api/pages/${pid}`, { method: 'DELETE' })
+      pages = pages.filter(p => p.id !== pid)
+      delete allComments[pid]
+      showScreensView()
+    })
+
+    // Single click → navigate (debounced to allow dblclick)
+    card.addEventListener('click', e => {
+      if (e.target.closest('.screen-menu') || e.target.tagName === 'INPUT') return
+      if (_clickTimer) return
+      _clickTimer = setTimeout(() => {
+        _clickTimer = null
+        enterViewerMode(pid)
+      }, 220)
+    })
+
+    // Double-click on name → rename
+    card.addEventListener('dblclick', e => {
+      if (!e.target.closest('.screen-info')) return
+      if (_clickTimer) { clearTimeout(_clickTimer); _clickTimer = null }
+      startScreenRename(card, pid)
+    })
+  })
+}
+
+function renderArchivesGrid(grid) {
+  document.getElementById('noPagesScreens').classList.add('hidden')
+
+  if (!archivedPages.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text2);padding:60px 0;font-size:14px">Aucune page archivée.</div>'
+    return
+  }
+
+  grid.innerHTML = archivedPages.map(p => `
+    <div class="screen-card archive-card" data-pid="${p.id}" style="opacity:.85">
+      <div class="screen-thumb" style="position:relative">
+        <img src="/uploads/${project.id}/${p.filename}" alt="" draggable="false">
+        <div style="position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;">
+          <span style="color:#bbb;font-size:10px;font-weight:800;letter-spacing:2px;background:rgba(0,0,0,.6);padding:4px 10px;border-radius:4px;">ARCHIVÉ</span>
+        </div>
+      </div>
+      <div class="screen-info">
+        <div class="screen-name">${esc(p.name)}</div>
+        <div class="screen-count">v${p.version || 1} · archivée ${relTime(p.archived_at)}</div>
+      </div>
+    </div>
+  `).join('')
+
+  grid.querySelectorAll('.archive-card').forEach(card => {
+    card.addEventListener('click', () => showArchivedPageViewer(Number(card.dataset.pid)))
+  })
+}
+
+function startScreenRename(card, pid) {
+  const nameEl = card.querySelector('.screen-name')
+  const page = pages.find(p => p.id === pid)
+  if (!page) return
+
+  const input = document.createElement('input')
+  input.type = 'text'
+  input.value = page.name
+  input.style.cssText = 'width:100%;background:var(--bg3);border:1px solid var(--accent);border-radius:4px;color:var(--text);font-size:13px;font-weight:600;padding:2px 6px;outline:none;font-family:inherit;'
+  nameEl.replaceWith(input)
+  input.select()
+  input.focus()
+
+  const save = async () => {
+    const newName = input.value.trim()
+    if (newName && newName !== page.name) {
+      page.name = newName
+      await fetch(`/api/pages/${pid}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName })
+      })
+    }
+    showScreensView()
+  }
+  input.addEventListener('blur', save)
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur() }
+    if (e.key === 'Escape') { input.value = page.name; input.blur() }
+    e.stopPropagation()
   })
 }
 

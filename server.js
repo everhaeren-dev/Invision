@@ -153,6 +153,26 @@ app.get('/api/share/:token/clients', (req, res) => {
 // ─── Apply auth to all remaining API routes ───────────────────────────────────
 app.use(requireAuth)
 
+// Conflict check before upload
+app.get('/api/projects/:projectId/pages/conflicts', (req, res) => {
+  const project = db.getProject(req.params.projectId)
+  if (!project) return res.status(404).json({ error: 'Not found' })
+  const names = (req.query.names || '').split(',').filter(Boolean)
+  const conflicts = names.map(filename => {
+    const existing = db.getPageByOriginalFilename(project.id, filename)
+    return existing ? { filename, existingName: existing.name } : null
+  }).filter(Boolean)
+  res.json(conflicts)
+})
+
+// Manual archive a page
+app.put('/api/pages/:id/archive', (req, res) => {
+  const page = db.getPage(req.params.id)
+  if (!page) return res.status(404).json({ error: 'Not found' })
+  db.archivePage(page.id)
+  res.json({ ok: true })
+})
+
 // ─── Multer storage ───────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
