@@ -116,10 +116,12 @@ function renderScreensGrid(grid) {
 
   grid.innerHTML = pages.map(p => {
     const count = (allComments[p.id] || []).length
+    const newCount = getNewClientCommentCount(p.id)
     return `
       <div class="screen-card" data-pid="${p.id}">
-        <div class="screen-thumb">
+        <div class="screen-thumb" style="position:relative">
           <img src="/uploads/${project.id}/${p.filename}" alt="" draggable="false">
+          ${newCount > 0 ? `<div class="notif-badge">${newCount}</div>` : ''}
         </div>
         <div class="screen-info">
           <div class="screen-name">${esc(p.name)}${p.is_retina ? ' <span class="tag tag-client" style="font-size:10px;padding:1px 6px">@2x</span>' : ''}</div>
@@ -295,15 +297,19 @@ function renderPageSelect() {
 function renderBottomBar() {
   if (!pages.length || viewMode !== 'viewer') { bottomBar.style.display = 'none'; return }
   bottomBar.style.display = 'flex'
-  bottomBar.innerHTML = pages.map(p => `
-    <div class="strip-item${p.id === currentPageId ? ' active' : ''}" data-pid="${p.id}">
-      <div class="strip-thumb">
-        <img src="/uploads/${project.id}/${p.filename}" alt="" draggable="false">
+  bottomBar.innerHTML = pages.map(p => {
+    const newCount = getNewClientCommentCount(p.id)
+    return `
+      <div class="strip-item${p.id === currentPageId ? ' active' : ''}" data-pid="${p.id}">
+        <div class="strip-thumb" style="position:relative">
+          <img src="/uploads/${project.id}/${p.filename}" alt="" draggable="false">
+          ${newCount > 0 && p.id !== currentPageId ? `<div class="notif-badge" style="font-size:9px;min-width:14px;height:14px;top:3px;right:3px">${newCount}</div>` : ''}
+        </div>
+        <button class="strip-delete-btn" title="Delete page">&times;</button>
+        <input class="strip-name" data-pid="${p.id}" value="${esc(p.name)}" title="Click to rename">
       </div>
-      <button class="strip-delete-btn" title="Delete page">&times;</button>
-      <input class="strip-name" data-pid="${p.id}" value="${esc(p.name)}" title="Click to rename">
-    </div>
-  `).join('')
+    `
+  }).join('')
 
   bottomBar.querySelectorAll('.strip-item').forEach(item => {
     item.querySelector('.strip-thumb').addEventListener('click', () => switchPage(Number(item.dataset.pid)))
@@ -323,6 +329,37 @@ function renderBottomBar() {
         renderPageSelect()
         renderSidebar()
       }
+    })
+
+    // Drag & drop reorder
+    item.setAttribute('draggable', 'true')
+    item.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', String(item.dataset.pid))
+      item.style.opacity = '0.4'
+    })
+    item.addEventListener('dragend', () => { item.style.opacity = ''; item.style.outline = '' })
+    item.addEventListener('dragover', e => {
+      e.preventDefault()
+      item.style.outline = '2px solid var(--accent)'
+    })
+    item.addEventListener('dragleave', () => { item.style.outline = '' })
+    item.addEventListener('drop', async e => {
+      e.preventDefault()
+      item.style.outline = ''
+      const draggedPid = Number(e.dataTransfer.getData('text/plain'))
+      const targetPid = Number(item.dataset.pid)
+      if (draggedPid === targetPid) return
+      const draggedIdx = pages.findIndex(p => p.id === draggedPid)
+      const targetIdx = pages.findIndex(p => p.id === targetPid)
+      if (draggedIdx === -1 || targetIdx === -1) return
+      const [draggedPage] = pages.splice(draggedIdx, 1)
+      pages.splice(targetIdx, 0, draggedPage)
+      renderBottomBar()
+      renderPageSelect()
+      await fetch(`/api/projects/${projectId}/pages/order`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pages: pages.map((p, i) => ({ id: p.id, order: i })) })
+      })
     })
   })
 
@@ -363,6 +400,7 @@ function renderBottomBar() {
 function switchPage(pageId) {
   pageId = Number(pageId)
   currentPageId = pageId
+  markPageSeen(pageId)
   pageSelect.value = pageId
   activePinId = null
   cancelCommentMode()

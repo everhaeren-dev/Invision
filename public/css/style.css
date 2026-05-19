@@ -529,3 +529,28 @@ input, textarea { font-family: inherit; }
   0%,100% { box-shadow: 0 0 0 0 #ff3b6b88; }
   50% { box-shadow: 0 0 0 8px #ff3b6b00; }
 }
+
+/* ── Replies & resolved ──────────────────────────────────────── */
+.replies-thread { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+.reply-item { padding: 4px 0 4px 12px; border-left: 2px solid var(--border); }
+.reply-header { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.reply-text { font-size: 12px; color: var(--text2); }
+.reply-form { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
+.reply-textarea { width: 100%; min-height: 48px; resize: vertical; }
+.resolve-btn {
+  background: none; border: 1px solid var(--border); color: var(--text2); padding: 3px 10px;
+  border-radius: 6px; font-size: 11px; cursor: pointer; transition: all .15s;
+}
+.resolve-btn:hover { border-color: #22c55e; color: #22c55e; }
+.resolved-badge { font-size: 10px; color: #22c55e; font-weight: 700; white-space: nowrap; }
+.resolved-text { text-decoration: line-through; color: var(--text2); }
+.comment-item.resolved { opacity: 0.75; }
+.pin.resolved-pin { opacity: 0.6; background: #22c55e !important; }
+
+/* ── Notification badge ──────────────────────────────────────── */
+.notif-badge {
+  position: absolute; top: 6px; right: 6px; background: var(--accent); color: #fff;
+  font-size: 10px; font-weight: 700; border-radius: 10px; min-width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center; padding: 0 4px;
+  box-shadow: 0 2px 6px #0006; pointer-events: none; z-index: 5;
+}

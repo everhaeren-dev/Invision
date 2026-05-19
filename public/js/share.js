@@ -364,14 +364,62 @@ function showBubble(comment, pin, num) {
   bubble.classList.add(isBelow ? 'below' : 'above')
   bubble.style.left = Math.min(Math.max(comment.x, 15), 85) + '%'
 
+  const replies = comment.replies || []
+  const repliesHtml = replies.map(r => `
+    <div class="reply-item">
+      <div class="reply-header">
+        <span class="ci-author" style="font-size:11px">${esc(r.author)}</span>
+        <span class="tag ${r.is_team ? 'tag-team' : 'tag-client'}" style="font-size:9px;padding:1px 5px">${r.is_team ? 'Team' : 'Client'}</span>
+        <span class="bubble-time">${relTime(r.created_at)}</span>
+      </div>
+      <div class="reply-text">${esc(r.text)}</div>
+    </div>
+  `).join('')
+
+  const isResolved = comment.status === 'resolved'
+
   bubble.innerHTML = `
     <div class="bubble-header">
       <span class="ci-pin client" style="width:20px;height:20px;font-size:10px">${num}</span>
       <span class="bubble-author">${esc(comment.author)}</span>
       <span class="bubble-time">${relTime(comment.created_at)}</span>
+      ${isResolved ? '<span class="resolved-badge" style="margin-left:auto">✓ Résolu</span>' : ''}
     </div>
-    <div class="bubble-text">${esc(comment.text)}</div>
+    <div class="bubble-text${isResolved ? ' resolved-text' : ''}">${esc(comment.text)}</div>
+    ${replies.length ? `<div class="replies-thread">${repliesHtml}</div>` : ''}
+    <div class="reply-form" id="replyForm-${comment.id}">
+      <textarea class="nc-textarea reply-textarea" placeholder="Répondre…" rows="2" id="shareReplyText-${comment.id}"></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:6px">
+        <button class="btn btn-primary" style="padding:4px 10px;font-size:12px" id="shareReplySend-${comment.id}">Répondre</button>
+      </div>
+    </div>
   `
+
+  bubble.querySelector(`#shareReplySend-${comment.id}`).addEventListener('click', async e => {
+    e.stopPropagation()
+    const textarea = bubble.querySelector(`#shareReplyText-${comment.id}`)
+    const text = textarea.value.trim()
+    if (!text) { textarea.focus(); return }
+    let author = getAuthor()
+    if (!author) {
+      showClientPicker(name => { author = name })
+      if (!getAuthor()) return
+      author = getAuthor()
+    }
+    const res = await fetch(`/api/share/${shareToken}/comments/${comment.id}/replies`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, author })
+    }).then(r => r.json())
+    if (!comment.replies) comment.replies = []
+    comment.replies.push(res)
+    allComments[currentPageId] = allComments[currentPageId] || []
+    closeAllBubbles()
+    renderPins()
+    renderSidebar()
+    activePinId = comment.id
+    renderPins()
+  })
+
   bubble.addEventListener('click', e => e.stopPropagation())
   pin.appendChild(bubble)
 }
@@ -394,16 +442,31 @@ function renderSidebar() {
   const sections = pages.map(page => {
     const comments = allComments[page.id] || []
     const isOpen = page.id === currentPageId
-    const listHtml = comments.map((c, idx) => `
-      <div class="comment-item${c.id === activePinId ? ' highlighted' : ''}" data-cid="${c.id}" data-pid="${page.id}">
-        <div class="ci-header">
-          <div class="ci-pin client">${idx + 1}</div>
-          <span class="ci-author">${esc(c.author)}</span>
-          <span class="ci-time">${relTime(c.created_at)}</span>
-        </div>
-        <div class="ci-text">${esc(c.text)}</div>
-      </div>
-    `).join('')
+      const listHtml = comments.map((c, idx) => {
+        const replies = (c.replies || []).map(r => `
+          <div class="reply-item">
+            <div class="reply-header">
+              <span class="ci-author" style="font-size:11px">${esc(r.author)}</span>
+              <span class="tag ${r.is_team ? 'tag-team' : 'tag-client'}" style="font-size:9px;padding:1px 5px">${r.is_team ? 'Team' : 'Client'}</span>
+              <span class="ci-time">${relTime(r.created_at)}</span>
+            </div>
+            <div class="reply-text">${esc(r.text)}</div>
+          </div>
+        `).join('')
+        const isResolved = c.status === 'resolved'
+        return `
+          <div class="comment-item${c.id === activePinId ? ' highlighted' : ''}${isResolved ? ' resolved' : ''}" data-cid="${c.id}" data-pid="${page.id}">
+            <div class="ci-header">
+              <div class="ci-pin client">${idx + 1}</div>
+              <span class="ci-author">${esc(c.author)}</span>
+              <span class="ci-time">${relTime(c.created_at)}</span>
+              ${isResolved ? '<span class="resolved-badge" style="margin-left:auto">✓</span>' : ''}
+            </div>
+            <div class="ci-text${isResolved ? ' resolved-text' : ''}">${esc(c.text)}</div>
+            ${replies}
+          </div>
+        `
+      }).join('')
 
     return `
       <div class="page-section" data-pid="${page.id}">
