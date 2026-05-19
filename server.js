@@ -19,7 +19,24 @@ app.use(session({
   cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 }
 }))
 
-// ─── Static files (no auth required) ─────────────────────────────────────────
+// ─── Protected HTML routes (must be before static middleware) ────────────────
+app.get('/', (req, res) => {
+  const users = db.getUsers()
+  if (!users.length) return res.redirect('/register')
+  if (!req.session || !req.session.userId) return res.redirect('/login')
+  res.sendFile(path.join(__dirname, 'public', 'index.html'))
+})
+
+app.get('/project/:id', (req, res) => {
+  if (!req.session || !req.session.userId) return res.redirect('/login')
+  res.sendFile(path.join(__dirname, 'public', 'viewer.html'))
+})
+
+// Block direct .html access for protected pages
+app.get('/index.html', (req, res) => res.redirect('/'))
+app.get('/viewer.html', (req, res) => res.redirect('/'))
+
+// ─── Static files (CSS, JS, images — no auth required) ───────────────────────
 app.use(express.static(path.join(__dirname, 'public')))
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
@@ -133,19 +150,8 @@ app.get('/api/share/:token/clients', (req, res) => {
   res.json([...names])
 })
 
-// ─── Apply auth to all remaining routes ───────────────────────────────────────
+// ─── Apply auth to all remaining API routes ───────────────────────────────────
 app.use(requireAuth)
-
-// First-run redirect: if no users exist, redirect to /register
-app.get('/', (req, res) => {
-  const users = db.getUsers()
-  if (!users.length) return res.redirect('/register')
-  res.sendFile(path.join(__dirname, 'public', 'index.html'))
-})
-
-app.get('/project/:id', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'viewer.html'))
-})
 
 // ─── Multer storage ───────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
