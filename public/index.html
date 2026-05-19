@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InVision — Projects</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="dash-layout">
+  <header class="dash-header">
+    <div class="dash-logo">InVision</div>
+    <button class="btn btn-primary" id="newProjectBtn">+ New project</button>
+  </header>
+  <main class="dash-main">
+    <div class="dash-title">Projects</div>
+    <div class="projects-grid" id="projectsGrid">
+      <div class="new-project-card" id="newProjectCard">
+        <div class="plus">+</div>
+        <span>New project</span>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- New project modal -->
+<div class="modal-backdrop hidden" id="modalBackdrop">
+  <div class="modal" id="newProjectModal">
+    <h2>New project</h2>
+    <input type="text" id="projectNameInput" placeholder="Client name (e.g. McDonalds)">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="createBtn">Create</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/dashboard.js"></script>
+</body>
+</html>

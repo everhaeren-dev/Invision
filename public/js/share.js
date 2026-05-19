@@ -1,0 +1,397 @@
+// ── State ────────────────────────────────────────────────────────────────────
+const shareToken = location.pathname.split('/').pop()
+let project = null
+let pages = []
+let allComments = {}   // pageId → [comments]
+let currentPageId = null
+let commentMode = false
+let pendingPin = null
+let activePinId = null
+let fitMode = false
+let pendingComment = null   // { x, y } waiting for author input
+let dragCounter = 0
+
+// ── DOM refs ──────────────────────────────────────────────────────────────────
+const projectName  = document.getElementById('projectName')
+const pageSelect   = document.getElementById('pageSelect')
+const canvasArea   = document.getElementById('canvasArea')
+const canvasInner  = document.getElementById('canvasInner')
+const canvasImg    = document.getElementById('canvasImg')
+const retinaBadge  = document.getElementById('retinaBadge')
+const noPages      = document.getElementById('noPages')
+const sidebarScroll= document.getElementById('sidebarScroll')
+const addCommentBtn= document.getElementById('addCommentBtn')
+const commentBar   = document.getElementById('commentModeBar')
+const authorBackdrop = document.getElementById('authorBackdrop')
+const authorInput  = document.getElementById('authorInput')
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+function relTime(d) {
+  const m = Math.floor((Date.now() - new Date(d)) / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+function getAuthor() { return localStorage.getItem('iv_client_author') || '' }
+function setAuthor(name) { localStorage.setItem('iv_client_author', name) }
+
+// ── Load data ─────────────────────────────────────────────────────────────────
+async function init() {
+  const data = await fetch(`/api/share/${shareToken}`).then(r => {
+    if (!r.ok) throw new Error('Not found')
+    return r.json()
+  }).catch(() => null)
+
+  if (!data) {
+    document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:var(--text2);font-size:16px">Project not found or link expired.</div>`
+    return
+  }
+
+  project = data.project
+  pages = data.pages
+  pages.forEach(p => { allComments[p.id] = p.comments || [] })
+
+  projectName.textContent = project.name
+  document.title = `${project.name} — InVision Review`
+
+  renderPageSelect()
+  if (pages.length > 0) switchPage(pages[0].id)
+  else noPages.classList.remove('hidden')
+}
+
+// ── Page management ───────────────────────────────────────────────────────────
+function renderPageSelect() {
+  pageSelect.innerHTML = pages.map(p =>
+    `<option value="${p.id}">${esc(p.name)}${p.is_retina ? ' (@2x)' : ''}</option>`
+  ).join('')
+}
+
+function switchPage(pageId) {
+  pageId = Number(pageId)
+  currentPageId = pageId
+  pageSelect.value = pageId
+  activePinId = null
+  cancelCommentMode()
+
+  const page = pages.find(p => p.id === pageId)
+  if (!page) return
+
+  noPages.classList.add('hidden')
+  canvasInner.classList.remove('hidden')
+  addCommentBtn.style.display = 'flex'
+
+  canvasImg.src = `/uploads/${project.id}/${page.filename}`
+  canvasImg.onload = () => {
+    if (page.is_retina) {
+      canvasImg.style.width  = (canvasImg.naturalWidth  / 2) + 'px'
+      canvasImg.style.height = (canvasImg.naturalHeight / 2) + 'px'
+    } else {
+      canvasImg.style.width  = ''
+      canvasImg.style.height = ''
+    }
+    renderPins()
+  }
+
+  retinaBadge.classList.toggle('hidden', !page.is_retina)
+  renderSidebar()
+}
+
+pageSelect.addEventListener('change', () => switchPage(Number(pageSelect.value)))
+
+// ── Zoom ──────────────────────────────────────────────────────────────────────
+document.getElementById('zoomFit').addEventListener('click', () => {
+  fitMode = true
+  canvasArea.classList.add('fit-mode')
+  document.getElementById('zoomFit').classList.add('active')
+  document.getElementById('zoom100').classList.remove('active')
+})
+document.getElementById('zoom100').addEventListener('click', () => {
+  fitMode = false
+  canvasArea.classList.remove('fit-mode')
+  document.getElementById('zoom100').classList.add('active')
+  document.getElementById('zoomFit').classList.remove('active')
+})
+
+// ── Comment mode ──────────────────────────────────────────────────────────────
+addCommentBtn.addEventListener('click', () => {
+  if (commentMode) cancelCommentMode()
+  else {
+    const author = getAuthor()
+    if (!author) {
+      authorInput.value = ''
+      authorBackdrop.classList.remove('hidden')
+      authorInput.focus()
+    } else {
+      enterCommentMode()
+    }
+  }
+})
+
+document.getElementById('authorConfirm').addEventListener('click', () => {
+  const name = authorInput.value.trim()
+  if (!name) { authorInput.focus(); return }
+  setAuthor(name)
+  authorBackdrop.classList.add('hidden')
+  enterCommentMode()
+})
+document.getElementById('authorCancel').addEventListener('click', () => {
+  authorBackdrop.classList.add('hidden')
+})
+authorInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('authorConfirm').click()
+})
+
+function enterCommentMode() {
+  commentMode = true
+  canvasArea.classList.replace('default-mode', 'comment-mode')
+  commentBar.classList.remove('hidden')
+  addCommentBtn.classList.add('active')
+  closeAllBubbles()
+}
+
+function cancelCommentMode() {
+  commentMode = false
+  canvasArea.classList.replace('comment-mode', 'default-mode')
+  commentBar.classList.add('hidden')
+  addCommentBtn.classList.remove('active')
+  if (pendingPin) { pendingPin.remove(); pendingPin = null }
+  closeNewCommentForm()
+}
+
+document.getElementById('cancelCommentMode').addEventListener('click', cancelCommentMode)
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { cancelCommentMode(); closeAllBubbles() } })
+
+// ── Canvas click ──────────────────────────────────────────────────────────────
+canvasArea.addEventListener('click', e => {
+  if (!commentMode || !currentPageId) return
+  if (e.target.closest('.new-comment-form') || e.target.closest('.pin')) return
+
+  const rect = canvasImg.getBoundingClientRect()
+  if (e.clientX < rect.left || e.clientX > rect.right ||
+      e.clientY < rect.top  || e.clientY > rect.bottom) return
+
+  const x = (e.clientX - rect.left) / rect.width  * 100
+  const y = (e.clientY - rect.top)  / rect.height * 100
+
+  closeNewCommentForm()
+  if (pendingPin) pendingPin.remove()
+
+  const pp = document.createElement('div')
+  pp.className = 'pending-pin'
+  pp.style.left = x + '%'
+  pp.style.top  = y + '%'
+  canvasInner.appendChild(pp)
+  pendingPin = pp
+
+  showNewCommentForm(x, y, pp)
+})
+
+function showNewCommentForm(x, y, anchor) {
+  closeNewCommentForm()
+  const author = getAuthor()
+
+  const form = document.createElement('div')
+  form.className = 'new-comment-form'
+  form.id = 'newCommentForm'
+
+  const imgH = canvasImg.getBoundingClientRect().height
+  const anchorY = y / 100 * imgH
+  const isBelow = anchorY < imgH * 0.75
+  form.classList.add(isBelow ? 'below' : 'above')
+  form.style.left = Math.min(Math.max(x, 15), 85) + '%'
+
+  form.innerHTML = `
+    <div style="margin-bottom:6px;font-size:12px;color:var(--text2)">
+      Posting as <strong style="color:var(--client-pin)">${esc(author)}</strong>
+      <button id="changeAuthor" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:11px;text-decoration:underline;margin-left:6px">Change</button>
+    </div>
+    <textarea class="nc-textarea" id="ncText" placeholder="Your feedback…" rows="3"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:6px">
+      <button class="btn btn-ghost" style="padding:5px 10px;font-size:12px" id="ncCancel">Cancel</button>
+      <button class="btn btn-primary" style="padding:5px 10px;font-size:12px" id="ncSave">Post</button>
+    </div>
+  `
+  anchor.appendChild(form)
+  form.querySelector('#ncText').focus()
+
+  form.querySelector('#changeAuthor').addEventListener('click', e => {
+    e.stopPropagation()
+    authorInput.value = getAuthor()
+    authorBackdrop.classList.remove('hidden')
+    authorInput.focus()
+    cancelCommentMode()
+  })
+  form.querySelector('#ncCancel').addEventListener('click', e => {
+    e.stopPropagation()
+    cancelCommentMode()
+  })
+  form.querySelector('#ncSave').addEventListener('click', e => {
+    e.stopPropagation()
+    submitComment(x, y, form)
+  })
+  form.querySelector('#ncText').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitComment(x, y, form)
+    e.stopPropagation()
+  })
+  form.addEventListener('click', e => e.stopPropagation())
+}
+
+async function submitComment(x, y, form) {
+  const textEl = form.querySelector('#ncText')
+  const text   = textEl.value.trim()
+  const author = getAuthor()
+  if (!text) { textEl.focus(); return }
+
+  const res = await fetch(`/api/share/${shareToken}/comments`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ page_id: currentPageId, x, y, text, author })
+  }).then(r => r.json())
+
+  if (!allComments[currentPageId]) allComments[currentPageId] = []
+  allComments[currentPageId].push({ ...res, is_team: 0 })
+
+  cancelCommentMode()
+  renderPins()
+  renderSidebar()
+  highlightComment(res.id)
+}
+
+function closeNewCommentForm() {
+  const f = document.getElementById('newCommentForm')
+  if (f) f.remove()
+}
+
+// ── Pins ──────────────────────────────────────────────────────────────────────
+function renderPins() {
+  document.querySelectorAll('.pin, .comment-bubble, .pending-pin').forEach(el => el.remove())
+  if (!currentPageId) return
+  const comments = allComments[currentPageId] || []
+
+  comments.forEach((c, idx) => {
+    const pin = document.createElement('div')
+    pin.className = `pin client-pin${c.id === activePinId ? ' active' : ''}`
+    pin.style.left = c.x + '%'
+    pin.style.top  = c.y + '%'
+    pin.textContent = idx + 1
+    pin.dataset.commentId = c.id
+    pin.addEventListener('click', e => {
+      e.stopPropagation()
+      if (commentMode) return
+      activePinId = activePinId === c.id ? null : c.id
+      closeAllBubbles()
+      renderPins()
+    })
+    canvasInner.appendChild(pin)
+    if (c.id === activePinId) showBubble(c, pin, idx + 1)
+  })
+}
+
+function showBubble(comment, pin, num) {
+  const rect = canvasImg.getBoundingClientRect()
+  const pinY = comment.y / 100 * rect.height
+
+  const bubble = document.createElement('div')
+  bubble.className = 'comment-bubble'
+  const isBelow = pinY < rect.height * 0.75
+  bubble.classList.add(isBelow ? 'below' : 'above')
+  bubble.style.left = Math.min(Math.max(comment.x, 15), 85) + '%'
+
+  bubble.innerHTML = `
+    <div class="bubble-header">
+      <span class="ci-pin client" style="width:20px;height:20px;font-size:10px">${num}</span>
+      <span class="bubble-author">${esc(comment.author)}</span>
+      <span class="bubble-time">${relTime(comment.created_at)}</span>
+    </div>
+    <div class="bubble-text">${esc(comment.text)}</div>
+  `
+  bubble.addEventListener('click', e => e.stopPropagation())
+  pin.appendChild(bubble)
+}
+
+function closeAllBubbles() {
+  document.querySelectorAll('.comment-bubble').forEach(el => el.remove())
+}
+
+canvasArea.addEventListener('click', e => {
+  if (!commentMode && !e.target.closest('.pin')) {
+    activePinId = null
+    closeAllBubbles()
+    document.querySelectorAll('.pin').forEach(p => p.classList.remove('active'))
+    document.querySelectorAll('.comment-item').forEach(i => i.classList.remove('highlighted'))
+  }
+})
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function renderSidebar() {
+  const sections = pages.map(page => {
+    const comments = allComments[page.id] || []
+    const isOpen = page.id === currentPageId
+    const listHtml = comments.map((c, idx) => `
+      <div class="comment-item${c.id === activePinId ? ' highlighted' : ''}" data-cid="${c.id}" data-pid="${page.id}">
+        <div class="ci-header">
+          <div class="ci-pin client">${idx + 1}</div>
+          <span class="ci-author">${esc(c.author)}</span>
+          <span class="ci-time">${relTime(c.created_at)}</span>
+        </div>
+        <div class="ci-text">${esc(c.text)}</div>
+      </div>
+    `).join('')
+
+    return `
+      <div class="page-section" data-pid="${page.id}">
+        <div class="page-section-header">
+          <span class="page-section-arrow ${isOpen ? 'open' : ''}">&#9654;</span>
+          <span class="page-section-name">${esc(page.name)}</span>
+          ${comments.length ? `<span class="page-section-badge">${comments.length}</span>` : ''}
+        </div>
+        <div class="page-comments" style="${isOpen ? '' : 'display:none'}">
+          ${listHtml || '<div style="padding:6px 4px;font-size:12px;color:var(--text2)">No comments yet</div>'}
+        </div>
+      </div>
+    `
+  }).join('')
+
+  sidebarScroll.innerHTML = sections
+
+  sidebarScroll.querySelectorAll('.page-section-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const section = header.closest('.page-section')
+      const pid = Number(section.dataset.pid)
+      const commentsDiv = section.querySelector('.page-comments')
+      const arrow = header.querySelector('.page-section-arrow')
+      const isOpen = commentsDiv.style.display !== 'none'
+      commentsDiv.style.display = isOpen ? 'none' : 'block'
+      arrow.classList.toggle('open', !isOpen)
+      if (!isOpen) switchPage(pid)
+    })
+  })
+
+  sidebarScroll.querySelectorAll('.comment-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const cid = Number(item.dataset.cid)
+      const pid = Number(item.dataset.pid)
+      if (pid !== currentPageId) {
+        switchPage(pid)
+        setTimeout(() => highlightComment(cid), 300)
+      } else {
+        highlightComment(cid)
+      }
+    })
+  })
+}
+
+function highlightComment(commentId) {
+  activePinId = commentId
+  renderPins()
+  renderSidebar()
+  const item = sidebarScroll.querySelector(`[data-cid="${commentId}"]`)
+  if (item) item.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  const pin = canvasInner.querySelector(`[data-comment-id="${commentId}"]`)
+  if (pin) pin.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+// ── Start ──────────────────────────────────────────────────────────────────────
+init()

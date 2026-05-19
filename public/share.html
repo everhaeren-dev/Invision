@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InVision — Review</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .share-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .share-page-select {
+      background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+      padding: 6px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; outline: none;
+    }
+  </style>
+</head>
+<body>
+<div class="viewer-layout">
+
+  <!-- Top bar -->
+  <header class="topbar" id="topbar">
+    <div class="topbar-logo">InVision</div>
+    <div class="topbar-divider"></div>
+    <span class="topbar-project" id="projectName">Loading…</span>
+    <div class="topbar-divider"></div>
+    <select class="share-page-select" id="pageSelect"></select>
+    <div class="share-topbar-right">
+      <span class="share-badge">Client Preview</span>
+      <div class="zoom-toggle">
+        <button class="zoom-btn" id="zoomFit">Fit</button>
+        <button class="zoom-btn active" id="zoom100">100%</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Body -->
+  <div class="viewer-body">
+    <!-- Canvas -->
+    <div class="canvas-area default-mode" id="canvasArea">
+      <div class="no-pages hidden" id="noPages">
+        <div class="big-icon">🖼️</div>
+        <h2>No images</h2>
+        <p>This project has no images yet.</p>
+      </div>
+      <div class="canvas-inner hidden" id="canvasInner">
+        <img class="canvas-img" id="canvasImg" src="" alt="">
+        <div class="retina-badge hidden" id="retinaBadge">@2x</div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">Comments</div>
+      </div>
+      <div class="sidebar-scroll" id="sidebarScroll">
+        <div class="sidebar-empty" id="sidebarEmpty">No comments yet.</div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- Add comment button -->
+<button class="add-comment-btn" id="addCommentBtn" title="Add comment" style="display:none">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+</button>
+
+<!-- Comment mode bar -->
+<div class="comment-mode-bar hidden" id="commentModeBar">
+  Click on the image to place a comment
+  <button id="cancelCommentMode">Cancel (Esc)</button>
+</div>
+
+<!-- Author name modal (first time) -->
+<div class="modal-backdrop hidden" id="authorBackdrop">
+  <div class="author-modal">
+    <h3>Leave a comment</h3>
+    <p>What's your name? This will appear with your comments.</p>
+    <input type="text" id="authorInput" placeholder="Your name" class="nc-input" style="width:100%;margin-bottom:16px">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="authorCancel">Cancel</button>
+      <button class="btn btn-primary" id="authorConfirm">Continue</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/share.js"></script>
+</body>
+</html>
