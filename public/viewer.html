@@ -7,12 +7,8 @@
   <link rel="stylesheet" href="/css/style.css">
   <style>
     .topbar-left { display: flex; align-items: center; gap: 0; flex: 1; min-width: 0; }
-    .topbar-actions { display: flex; align-items: center; gap: 6px; margin-left: 12px; }
     .upload-btn { position: relative; overflow: hidden; }
-    .upload-btn input[type=file] {
-      position: absolute; inset: 0; opacity: 0; cursor: pointer; font-size: 0;
-    }
-    .pages-count { font-size: 12px; color: var(--text2); white-space: nowrap; }
+    .upload-btn input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; font-size: 0; }
   </style>
 </head>
 <body>
@@ -23,47 +19,48 @@
     <div class="topbar-left">
       <a href="/" class="topbar-logo">InVision</a>
       <div class="topbar-divider"></div>
+      <button class="btn-icon" id="backToScreens" style="display:none;color:var(--text2);font-size:13px">&#8592; Pages</button>
+      <div class="topbar-divider" id="divBack" style="display:none"></div>
       <span class="topbar-project" id="projectName">Loading…</span>
-      <div class="topbar-divider"></div>
-      <select class="page-select" id="pageSelect"></select>
-      <div class="topbar-actions">
-        <label class="btn btn-ghost btn-icon upload-btn" title="Add images">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Upload
-          <input type="file" id="fileInput" accept="image/*" multiple>
-        </label>
-      </div>
+      <div class="topbar-divider" id="divSelect" style="display:none"></div>
+      <select class="page-select" id="pageSelect" style="display:none"></select>
     </div>
     <div class="topbar-right">
-      <span class="pages-count" id="pagesCount"></span>
-      <div class="zoom-toggle">
+      <div class="zoom-toggle" id="zoomSection" style="display:none">
         <button class="zoom-btn" id="zoomFit">Fit</button>
         <button class="zoom-btn active" id="zoom100">100%</button>
       </div>
+      <label class="btn btn-ghost btn-icon upload-btn" title="Add images">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload
+        <input type="file" id="fileInput" accept="image/*" multiple>
+      </label>
       <button class="share-btn" id="shareBtn">Share</button>
     </div>
   </header>
 
-  <!-- Body -->
-  <div class="viewer-body" style="min-height:0">
-    <!-- Canvas -->
+  <!-- Screens overview (shown on first open) -->
+  <div id="screensView" class="screens-view" style="display:none">
+    <div class="screens-header">
+      <h1 id="screensTitle"></h1>
+      <p class="screens-subtitle" id="screensSubtitle"></p>
+    </div>
+    <div class="screens-grid" id="screensGrid"></div>
+    <div class="no-pages hidden" id="noPagesScreens" style="position:static;flex:none;margin-top:60px">
+      <div class="big-icon">🖼️</div>
+      <h2>No images yet</h2>
+      <p>Upload your first JPG to get started, or drag & drop images anywhere on this page.</p>
+    </div>
+  </div>
+
+  <!-- Viewer (canvas + sidebar) -->
+  <div class="viewer-body" id="viewerBody" style="display:none;min-height:0">
     <div class="canvas-area default-mode" id="canvasArea">
-      <div class="no-pages hidden" id="noPages">
-        <div class="big-icon">🖼️</div>
-        <h2>No images yet</h2>
-        <p>Upload your first JPG to get started, or drag & drop images anywhere.</p>
-        <label class="btn btn-primary" style="cursor:pointer">
-          Choose images
-          <input type="file" id="fileInputEmpty" accept="image/*" multiple style="display:none">
-        </label>
-      </div>
       <div class="canvas-inner hidden" id="canvasInner">
         <img class="canvas-img" id="canvasImg" src="" alt="">
         <div class="retina-badge hidden" id="retinaBadge">@2x</div>
       </div>
     </div>
-
-    <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-title">Comments</div>
@@ -73,15 +70,13 @@
           <button class="filter-tab" data-filter="client">Client</button>
         </div>
       </div>
-      <div class="sidebar-scroll" id="sidebarScroll">
-        <div class="sidebar-empty" id="sidebarEmpty">No comments yet.<br>Click on the image to add one.</div>
-      </div>
+      <div class="sidebar-scroll" id="sidebarScroll"></div>
     </aside>
   </div>
 
-  <!-- Bottom pages strip -->
-  <div class="bottom-bar" id="bottomBar" style="display:none">
-  </div>
+  <!-- Bottom pages strip (viewer mode only) -->
+  <div class="bottom-bar" id="bottomBar" style="display:none"></div>
+
 </div>
 
 <!-- Add comment button -->

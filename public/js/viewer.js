@@ -1,26 +1,24 @@
-// ── State ───────────────────────────────────────────────────────────────────
-const projectId = location.pathname.split('/').pop()
-let project = null
-let pages = []
-let allComments = {}   // pageId → [comments]
+// ── State ─────────────────────────────────────────────────────────────────────
+const projectId   = location.pathname.split('/').pop()
+let project       = null
+let pages         = []
+let allComments   = {}   // pageId → [comments]
 let currentPageId = null
-let commentMode = false
-let pendingPin = null
-let activePinId = null
+let commentMode   = false
+let pendingPin    = null
+let activePinId   = null
 let commentFilter = 'all'
-let fitMode = false
-let dragCounter = 0
+let viewMode      = 'screens'   // 'screens' | 'viewer'
+let dragCounter   = 0
 
-// ── DOM refs ────────────────────────────────────────────────────────────────
+// ── DOM refs ──────────────────────────────────────────────────────────────────
 const projectName  = document.getElementById('projectName')
 const pageSelect   = document.getElementById('pageSelect')
 const canvasArea   = document.getElementById('canvasArea')
 const canvasInner  = document.getElementById('canvasInner')
 const canvasImg    = document.getElementById('canvasImg')
 const retinaBadge  = document.getElementById('retinaBadge')
-const noPages      = document.getElementById('noPages')
 const sidebarScroll= document.getElementById('sidebarScroll')
-const sidebarEmpty = document.getElementById('sidebarEmpty')
 const addCommentBtn= document.getElementById('addCommentBtn')
 const commentBar   = document.getElementById('commentModeBar')
 const dropOverlay  = document.getElementById('dropOverlay')
@@ -28,10 +26,11 @@ const shareToast   = document.getElementById('shareToast')
 const shareUrlInput= document.getElementById('shareUrl')
 const uploadProg   = document.getElementById('uploadProgress')
 const progressFill = document.getElementById('progressFill')
-const pagesCount   = document.getElementById('pagesCount')
 const bottomBar    = document.getElementById('bottomBar')
+const screensView  = document.getElementById('screensView')
+const viewerBody   = document.getElementById('viewerBody')
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
 function relTime(d) {
   const m = Math.floor((Date.now() - new Date(d)) / 60000)
@@ -43,7 +42,7 @@ function relTime(d) {
 }
 function getAuthor() { return localStorage.getItem('iv_team_author') || 'Team' }
 
-// ── Load data ────────────────────────────────────────────────────────────────
+// ── Load data ─────────────────────────────────────────────────────────────────
 async function init() {
   const [projRes, pagesRes] = await Promise.all([
     fetch(`/api/projects/${projectId}`).then(r => r.json()),
@@ -53,35 +52,95 @@ async function init() {
   pages = pagesRes
   projectName.textContent = project.name
   document.title = `${project.name} — InVision`
-
   await loadAllComments()
-  renderPageSelect()
-  if (pages.length > 0) switchPage(pages[0].id)
-  else showNoPages()
+  showScreensView()
 }
 
 async function loadAllComments() {
-  const fetches = pages.map(p =>
+  await Promise.all(pages.map(p =>
     fetch(`/api/pages/${p.id}/comments`).then(r => r.json()).then(c => { allComments[p.id] = c })
-  )
-  await Promise.all(fetches)
+  ))
 }
 
-async function reloadComments(pageId) {
-  allComments[pageId] = await fetch(`/api/pages/${pageId}/comments`).then(r => r.json())
+// ── View modes ────────────────────────────────────────────────────────────────
+function showScreensView() {
+  viewMode = 'screens'
+
+  // Topbar
+  document.getElementById('backToScreens').style.display = 'none'
+  document.getElementById('divBack').style.display = 'none'
+  document.getElementById('divSelect').style.display = 'none'
+  pageSelect.style.display = 'none'
+  document.getElementById('zoomSection').style.display = 'none'
+
+  // Layout
+  screensView.style.display = 'flex'
+  viewerBody.style.display = 'none'
+  bottomBar.style.display = 'none'
+  addCommentBtn.style.display = 'none'
+  cancelCommentMode()
+
+  // Title
+  document.getElementById('screensTitle').textContent = project.name
+  const total = Object.values(allComments).reduce((s, c) => s + c.length, 0)
+  document.getElementById('screensSubtitle').textContent =
+    `${pages.length} page${pages.length !== 1 ? 's' : ''}${total ? ` · ${total} comment${total !== 1 ? 's' : ''}` : ''}`
+
+  document.getElementById('noPagesScreens').classList.toggle('hidden', pages.length > 0)
+
+  const grid = document.getElementById('screensGrid')
+  grid.innerHTML = pages.map(p => {
+    const count = (allComments[p.id] || []).length
+    return `
+      <div class="screen-card" data-pid="${p.id}">
+        <div class="screen-thumb">
+          <img src="/uploads/${project.id}/${p.filename}" alt="" draggable="false">
+        </div>
+        <div class="screen-info">
+          <div class="screen-name">${esc(p.name)}${p.is_retina ? ' <span class="tag tag-client" style="font-size:10px;padding:1px 6px">@2x</span>' : ''}</div>
+          <div class="screen-count">${count ? `${count} comment${count !== 1 ? 's' : ''}` : 'No comments'}</div>
+        </div>
+      </div>
+    `
+  }).join('')
+
+  grid.querySelectorAll('.screen-card').forEach(card => {
+    card.addEventListener('click', () => enterViewerMode(Number(card.dataset.pid)))
+  })
 }
 
-// ── Page management ──────────────────────────────────────────────────────────
+function enterViewerMode(pageId) {
+  viewMode = 'viewer'
+
+  // Topbar
+  document.getElementById('backToScreens').style.display = 'flex'
+  document.getElementById('divBack').style.display = ''
+  document.getElementById('divSelect').style.display = ''
+  pageSelect.style.display = ''
+  document.getElementById('zoomSection').style.display = 'flex'
+
+  // Layout
+  screensView.style.display = 'none'
+  viewerBody.style.display = 'flex'
+  addCommentBtn.style.display = 'flex'
+
+  renderPageSelect()
+  switchPage(pageId)
+}
+
+document.getElementById('backToScreens').addEventListener('click', () => {
+  loadAllComments().then(() => showScreensView())
+})
+
+// ── Page management ───────────────────────────────────────────────────────────
 function renderPageSelect() {
   pageSelect.innerHTML = pages.map(p =>
     `<option value="${p.id}">${esc(p.name)}${p.is_retina ? ' (@2x)' : ''}</option>`
   ).join('')
-  pagesCount.textContent = pages.length ? `${pages.length} page${pages.length > 1 ? 's' : ''}` : ''
-  renderBottomBar()
 }
 
 function renderBottomBar() {
-  if (!pages.length) { bottomBar.style.display = 'none'; return }
+  if (!pages.length || viewMode !== 'viewer') { bottomBar.style.display = 'none'; return }
   bottomBar.style.display = 'flex'
   bottomBar.innerHTML = pages.map(p => `
     <div class="strip-item${p.id === currentPageId ? ' active' : ''}" data-pid="${p.id}">
@@ -93,15 +152,13 @@ function renderBottomBar() {
   `).join('')
 
   bottomBar.querySelectorAll('.strip-item').forEach(item => {
-    item.querySelector('.strip-thumb').addEventListener('click', () => {
-      switchPage(Number(item.dataset.pid))
-    })
+    item.querySelector('.strip-thumb').addEventListener('click', () => switchPage(Number(item.dataset.pid)))
   })
 
   bottomBar.querySelectorAll('.strip-name').forEach(input => {
     input.addEventListener('focus', e => e.target.select())
     input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.target.blur() }
+      if (e.key === 'Enter') e.target.blur()
       if (e.key === 'Escape') {
         const p = pages.find(p => p.id === Number(e.target.dataset.pid))
         if (p) e.target.value = p.name
@@ -112,20 +169,22 @@ function renderBottomBar() {
     input.addEventListener('blur', async e => {
       const pid = Number(e.target.dataset.pid)
       const newName = e.target.value.trim()
-      if (!newName) { e.target.value = pages.find(p => p.id === pid)?.name || ''; return }
       const p = pages.find(p => p.id === pid)
-      if (!p || p.name === newName) return
+      if (!p || !newName || p.name === newName) {
+        if (!newName) e.target.value = p?.name || ''
+        return
+      }
       p.name = newName
       await fetch(`/api/pages/${pid}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName })
       })
-      pageSelect.querySelector(`option[value="${pid}"]`).textContent = newName + (p.is_retina ? ' (@2x)' : '')
+      const opt = pageSelect.querySelector(`option[value="${pid}"]`)
+      if (opt) opt.textContent = newName + (p.is_retina ? ' (@2x)' : '')
       renderSidebar()
     })
   })
 
-  // Scroll active item into view
   const activeItem = bottomBar.querySelector('.strip-item.active')
   if (activeItem) activeItem.scrollIntoView({ inline: 'nearest', behavior: 'smooth' })
 }
@@ -140,9 +199,7 @@ function switchPage(pageId) {
   const page = pages.find(p => p.id === pageId)
   if (!page) return
 
-  noPages.classList.add('hidden')
   canvasInner.classList.remove('hidden')
-  addCommentBtn.style.display = 'flex'
 
   canvasImg.src = `/uploads/${project.id}/${page.filename}`
   canvasImg.onload = () => {
@@ -161,30 +218,21 @@ function switchPage(pageId) {
   renderBottomBar()
 }
 
-function showNoPages() {
-  noPages.classList.remove('hidden')
-  canvasInner.classList.add('hidden')
-  addCommentBtn.style.display = 'none'
-  renderSidebar()
-}
-
 pageSelect.addEventListener('change', () => switchPage(Number(pageSelect.value)))
 
-// ── Zoom ─────────────────────────────────────────────────────────────────────
+// ── Zoom ──────────────────────────────────────────────────────────────────────
 document.getElementById('zoomFit').addEventListener('click', () => {
-  fitMode = true
   canvasArea.classList.add('fit-mode')
   document.getElementById('zoomFit').classList.add('active')
   document.getElementById('zoom100').classList.remove('active')
 })
 document.getElementById('zoom100').addEventListener('click', () => {
-  fitMode = false
   canvasArea.classList.remove('fit-mode')
   document.getElementById('zoom100').classList.add('active')
   document.getElementById('zoomFit').classList.remove('active')
 })
 
-// ── Comment mode ─────────────────────────────────────────────────────────────
+// ── Comment mode ──────────────────────────────────────────────────────────────
 addCommentBtn.addEventListener('click', () => {
   if (commentMode) cancelCommentMode()
   else enterCommentMode()
@@ -208,9 +256,11 @@ function cancelCommentMode() {
 }
 
 document.getElementById('cancelCommentMode').addEventListener('click', cancelCommentMode)
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { cancelCommentMode(); closeAllBubbles() } })
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { cancelCommentMode(); closeAllBubbles() }
+})
 
-// ── Canvas click → place comment ─────────────────────────────────────────────
+// ── Canvas click → place comment ──────────────────────────────────────────────
 canvasArea.addEventListener('click', e => {
   if (!commentMode || !currentPageId) return
   if (e.target.closest('.new-comment-form') || e.target.closest('.pin')) return
@@ -225,6 +275,7 @@ canvasArea.addEventListener('click', e => {
   closeNewCommentForm()
   if (pendingPin) pendingPin.remove()
 
+  // Pending pin sits in canvasInner
   const pp = document.createElement('div')
   pp.className = 'pending-pin'
   pp.style.left = x + '%'
@@ -232,22 +283,28 @@ canvasArea.addEventListener('click', e => {
   canvasInner.appendChild(pp)
   pendingPin = pp
 
-  showNewCommentForm(x, y, pp)
+  showNewCommentForm(x, y)
 })
 
-function showNewCommentForm(x, y, anchor) {
+function showNewCommentForm(x, y) {
   closeNewCommentForm()
   const author = getAuthor()
+  const isBelow = y < 72
 
+  // Form is a direct child of canvasInner (sibling of pin, not child)
   const form = document.createElement('div')
   form.className = 'new-comment-form'
   form.id = 'newCommentForm'
+  form.style.left = Math.min(Math.max(x, 15), 75) + '%'
+  form.style.position = 'absolute'
 
-  const imgH = canvasImg.getBoundingClientRect().height
-  const anchorY = y / 100 * imgH
-  const isBelow = anchorY < imgH * 0.75
-  form.classList.add(isBelow ? 'below' : 'above')
-  form.style.left = Math.min(Math.max(x, 15), 85) + '%'
+  if (isBelow) {
+    form.style.top = `calc(${y}% + 20px)`
+    form.style.transform = 'translateX(-50%)'
+  } else {
+    form.style.top = `calc(${y}% - 20px)`
+    form.style.transform = 'translate(-50%, -100%)'
+  }
 
   form.innerHTML = `
     <div class="nc-row">
@@ -265,20 +322,18 @@ function showNewCommentForm(x, y, anchor) {
       </div>
     </div>
   `
-  anchor.appendChild(form)
 
-  const textarea = form.querySelector('#ncText')
-  textarea.focus()
+  // Append to canvasInner directly, not inside pending-pin
+  canvasInner.appendChild(form)
+  form.querySelector('#ncText').focus()
 
   form.querySelector('#ncCancel').addEventListener('click', e => {
-    e.stopPropagation()
-    cancelCommentMode()
+    e.stopPropagation(); cancelCommentMode()
   })
   form.querySelector('#ncSave').addEventListener('click', e => {
-    e.stopPropagation()
-    submitComment(x, y, form)
+    e.stopPropagation(); submitComment(x, y, form)
   })
-  textarea.addEventListener('keydown', e => {
+  form.querySelector('#ncText').addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitComment(x, y, form)
     e.stopPropagation()
   })
@@ -286,13 +341,10 @@ function showNewCommentForm(x, y, anchor) {
 }
 
 async function submitComment(x, y, form) {
-  const authorEl = form.querySelector('#ncAuthor')
-  const textEl   = form.querySelector('#ncText')
-  const typeEl   = form.querySelector('input[name=nc_type]:checked')
-  const author = authorEl.value.trim() || 'Team'
-  const text   = textEl.value.trim()
-  const isTeam = typeEl.value === 'team'
-  if (!text) { textEl.focus(); return }
+  const author = form.querySelector('#ncAuthor').value.trim() || 'Team'
+  const text   = form.querySelector('#ncText').value.trim()
+  const isTeam = form.querySelector('input[name=nc_type]:checked').value === 'team'
+  if (!text) { form.querySelector('#ncText').focus(); return }
 
   localStorage.setItem('iv_team_author', author)
 
@@ -307,21 +359,18 @@ async function submitComment(x, y, form) {
   cancelCommentMode()
   renderPins()
   renderSidebar()
-  highlightComment(res.id)
 }
 
 function closeNewCommentForm() {
-  const f = document.getElementById('newCommentForm')
-  if (f) f.remove()
+  document.getElementById('newCommentForm')?.remove()
 }
 
-// ── Pins ─────────────────────────────────────────────────────────────────────
+// ── Pins ──────────────────────────────────────────────────────────────────────
 function renderPins() {
-  document.querySelectorAll('.pin, .comment-bubble, .pending-pin').forEach(el => el.remove())
+  canvasInner.querySelectorAll('.pin, .comment-bubble, .pending-pin').forEach(el => el.remove())
   if (!currentPageId) return
 
-  const comments = filteredComments(currentPageId)
-  comments.forEach((c, idx) => {
+  filteredComments(currentPageId).forEach((c, idx) => {
     const pin = document.createElement('div')
     pin.className = `pin ${c.is_team ? 'team-pin' : 'client-pin'}${c.id === activePinId ? ' active' : ''}`
     pin.style.left = c.x + '%'
@@ -330,11 +379,14 @@ function renderPins() {
     pin.dataset.commentId = c.id
     pin.addEventListener('click', e => {
       e.stopPropagation()
-      toggleBubble(c, pin, idx + 1)
+      if (commentMode) return
+      if (activePinId === c.id) { activePinId = null; closeAllBubbles(); renderPins(); return }
+      activePinId = c.id
+      closeAllBubbles()
+      renderPins()
     })
     canvasInner.appendChild(pin)
-
-    if (c.id === activePinId) showBubble(c, pin, idx + 1)
+    if (c.id === activePinId) showBubble(c, idx + 1)
   })
 }
 
@@ -345,34 +397,29 @@ function filteredComments(pageId) {
   return cs
 }
 
-function toggleBubble(comment, pin, num) {
-  if (commentMode) return
-  if (activePinId === comment.id) {
-    activePinId = null
-    closeAllBubbles()
-    renderPins()
-    return
-  }
-  activePinId = comment.id
-  closeAllBubbles()
-  renderPins()
-}
-
-function showBubble(comment, pin, num) {
-  const rect = canvasImg.getBoundingClientRect()
-  const pinY = comment.y / 100 * rect.height
-
+// Bubble is appended to canvasInner (not the pin), positioned by percentage
+function showBubble(comment, num) {
+  const isBelow = comment.y < 72
   const bubble = document.createElement('div')
   bubble.className = 'comment-bubble'
   bubble.id = `bubble-${comment.id}`
 
-  const isBelow = pinY < rect.height * 0.75
-  bubble.classList.add(isBelow ? 'below' : 'above')
-  bubble.style.left = Math.min(Math.max(comment.x, 15), 85) + '%'
+  const clampedX = Math.min(Math.max(comment.x, 12), 82)
+  bubble.style.left = clampedX + '%'
+  bubble.style.position = 'absolute'
+  bubble.style.zIndex = '20'
+
+  if (isBelow) {
+    bubble.style.top = `calc(${comment.y}% + 20px)`
+    bubble.style.transform = 'translateX(-50%)'
+  } else {
+    bubble.style.top = `calc(${comment.y}% - 20px)`
+    bubble.style.transform = 'translate(-50%, -100%)'
+  }
 
   bubble.innerHTML = `
     <div class="bubble-header">
-      <span class="ci-pin ${comment.is_team ? 'team' : 'client'}" style="width:20px;height:20px;font-size:10px">${num}</span>
+      <span class="ci-pin ${comment.is_team ? 'team' : 'client'}" style="width:20px;height:20px;font-size:10px;flex-shrink:0">${num}</span>
       <span class="bubble-author">${esc(comment.author)}</span>
       <span class="tag ${comment.is_team ? 'tag-team' : 'tag-client'}">${comment.is_team ? 'Team' : 'Client'}</span>
       <span class="bubble-time">${relTime(comment.created_at)}</span>
@@ -381,24 +428,22 @@ function showBubble(comment, pin, num) {
     <button class="bubble-delete" data-id="${comment.id}">Delete</button>
   `
   bubble.querySelector('.bubble-delete').addEventListener('click', e => {
-    e.stopPropagation()
-    deleteComment(comment.id)
+    e.stopPropagation(); deleteComment(comment.id)
   })
   bubble.addEventListener('click', e => e.stopPropagation())
-  pin.appendChild(bubble)
+  canvasInner.appendChild(bubble)
 }
 
 function closeAllBubbles() {
-  document.querySelectorAll('.comment-bubble').forEach(el => el.remove())
+  canvasInner.querySelectorAll('.comment-bubble').forEach(el => el.remove())
 }
 
-// close bubble on canvas bg click
 canvasArea.addEventListener('click', e => {
   if (!commentMode && !e.target.closest('.pin') && !e.target.closest('.comment-bubble')) {
     activePinId = null
     closeAllBubbles()
-    document.querySelectorAll('.pin').forEach(p => p.classList.remove('active'))
-    document.querySelectorAll('.comment-item').forEach(i => i.classList.remove('highlighted'))
+    canvasInner.querySelectorAll('.pin').forEach(p => p.classList.remove('active'))
+    sidebarScroll.querySelectorAll('.comment-item').forEach(i => i.classList.remove('highlighted'))
   }
 })
 
@@ -414,20 +459,14 @@ async function deleteComment(id) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function renderSidebar() {
-  const hasAnyComment = Object.values(allComments).some(cs => cs.length > 0)
-
   if (!pages.length) {
-    sidebarEmpty.textContent = 'Upload images to get started.'
-    sidebarEmpty.classList.remove('hidden')
-    sidebarScroll.innerHTML = ''
-    sidebarScroll.appendChild(sidebarEmpty)
+    sidebarScroll.innerHTML = '<div class="sidebar-empty">Upload images to get started.</div>'
     return
   }
 
   const sections = pages.map(page => {
     const comments = filteredComments(page.id)
     if (!comments.length && commentFilter !== 'all') return ''
-
     const isOpen = page.id === currentPageId
     const listHtml = comments.map((c, idx) => `
       <div class="comment-item${c.id === activePinId ? ' highlighted' : ''}" data-cid="${c.id}" data-pid="${page.id}">
@@ -449,7 +488,7 @@ function renderSidebar() {
           ${comments.length ? `<span class="page-section-badge">${comments.length}</span>` : ''}
         </div>
         <div class="page-comments" style="${isOpen ? '' : 'display:none'}">
-          ${listHtml || '<div style="padding:6px 4px;font-size:12px;color:var(--text2)">No comments yet</div>'}
+          ${listHtml || '<div style="padding:6px 4px;font-size:12px;color:var(--text2)">No comments</div>'}
         </div>
       </div>
     `
@@ -457,29 +496,26 @@ function renderSidebar() {
 
   sidebarScroll.innerHTML = sections
 
-  // Click on page section header → toggle + switch page
   sidebarScroll.querySelectorAll('.page-section-header').forEach(header => {
     header.addEventListener('click', () => {
       const section = header.closest('.page-section')
       const pid = Number(section.dataset.pid)
-      const comments = section.querySelector('.page-comments')
+      const commentsDiv = section.querySelector('.page-comments')
       const arrow = header.querySelector('.page-section-arrow')
-      const isOpen = comments.style.display !== 'none'
-      comments.style.display = isOpen ? 'none' : 'block'
+      const isOpen = commentsDiv.style.display !== 'none'
+      commentsDiv.style.display = isOpen ? 'none' : 'block'
       arrow.classList.toggle('open', !isOpen)
       if (!isOpen) switchPage(pid)
     })
   })
 
-  // Click on comment item → navigate + highlight
   sidebarScroll.querySelectorAll('.comment-item').forEach(item => {
     item.addEventListener('click', () => {
       const cid = Number(item.dataset.cid)
       const pid = Number(item.dataset.pid)
       if (pid !== currentPageId) {
         switchPage(pid)
-        // wait for image to load then highlight
-        setTimeout(() => highlightComment(cid), 300)
+        setTimeout(() => highlightComment(cid), 350)
       } else {
         highlightComment(cid)
       }
@@ -491,19 +527,13 @@ function highlightComment(commentId) {
   activePinId = commentId
   renderPins()
   renderSidebar()
-
-  // Scroll sidebar item into view
-  const item = sidebarScroll.querySelector(`[data-cid="${commentId}"]`)
-  if (item) item.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-
-  // Scroll canvas so the pin is visible
-  const pin = canvasInner.querySelector(`[data-comment-id="${commentId}"]`)
-  if (pin) {
-    pin.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
+  sidebarScroll.querySelector(`[data-cid="${commentId}"]`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  canvasInner.querySelector(`[data-comment-id="${commentId}"]`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
-// ── Sidebar filter tabs ───────────────────────────────────────────────────────
+// ── Sidebar filter ────────────────────────────────────────────────────────────
 document.querySelectorAll('.filter-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'))
@@ -517,31 +547,29 @@ document.querySelectorAll('.filter-tab').forEach(tab => {
 // ── Upload ────────────────────────────────────────────────────────────────────
 async function uploadFiles(files) {
   if (!files.length) return
-  const form = new FormData()
-  for (const f of files) form.append('images', f)
+  const fd = new FormData()
+  for (const f of files) fd.append('images', f)
 
   uploadProg.classList.remove('hidden')
   progressFill.style.width = '30%'
 
   try {
     const res = await fetch(`/api/projects/${projectId}/pages`, {
-      method: 'POST', body: form
+      method: 'POST', body: fd
     }).then(r => r.json())
 
     progressFill.style.width = '100%'
     pages = res.pages
-
-    // load comments for new pages
-    for (const p of pages) {
-      if (!allComments[p.id]) allComments[p.id] = []
-    }
+    for (const p of pages) { if (!allComments[p.id]) allComments[p.id] = [] }
     await loadAllComments()
 
-    renderPageSelect()
-
-    // switch to first new page
-    const newPage = res.pages[res.pages.length - res.uploaded.length]
-    if (newPage) switchPage(newPage.id)
+    if (viewMode === 'screens') {
+      showScreensView()
+    } else {
+      renderPageSelect()
+      const newPage = res.pages[res.pages.length - res.uploaded.length]
+      if (newPage) switchPage(newPage.id)
+    }
   } finally {
     setTimeout(() => {
       uploadProg.classList.add('hidden')
@@ -551,39 +579,26 @@ async function uploadFiles(files) {
 }
 
 document.getElementById('fileInput').addEventListener('change', e => {
-  uploadFiles([...e.target.files])
-  e.target.value = ''
-})
-document.getElementById('fileInputEmpty').addEventListener('change', e => {
-  uploadFiles([...e.target.files])
-  e.target.value = ''
+  uploadFiles([...e.target.files]); e.target.value = ''
 })
 
 // ── Drag & drop ───────────────────────────────────────────────────────────────
 document.addEventListener('dragenter', e => {
-  if ([...e.dataTransfer.types].includes('Files')) {
-    dragCounter++
-    dropOverlay.classList.remove('hidden')
-  }
+  if ([...e.dataTransfer.types].includes('Files')) { dragCounter++; dropOverlay.classList.remove('hidden') }
 })
 document.addEventListener('dragleave', () => {
-  dragCounter--
-  if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.add('hidden') }
+  dragCounter--; if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.add('hidden') }
 })
 document.addEventListener('dragover', e => e.preventDefault())
 document.addEventListener('drop', e => {
-  e.preventDefault()
-  dragCounter = 0
-  dropOverlay.classList.add('hidden')
-  const files = [...e.dataTransfer.files].filter(f => /\.(jpe?g|png|gif|webp)$/i.test(f.name))
-  uploadFiles(files)
+  e.preventDefault(); dragCounter = 0; dropOverlay.classList.add('hidden')
+  uploadFiles([...e.dataTransfer.files].filter(f => /\.(jpe?g|png|gif|webp)$/i.test(f.name)))
 })
 
 // ── Share ─────────────────────────────────────────────────────────────────────
 document.getElementById('shareBtn').addEventListener('click', () => {
   if (!project) return
-  const url = `${location.origin}/share/${project.share_token}`
-  shareUrlInput.value = url
+  shareUrlInput.value = `${location.origin}/share/${project.share_token}`
   shareToast.classList.remove('hidden')
 })
 document.getElementById('shareToastClose').addEventListener('click', () => shareToast.classList.add('hidden'))

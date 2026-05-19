@@ -168,8 +168,7 @@ input, textarea { font-family: inherit; }
   margin: 32px;
 }
 .canvas-area.fit-mode .canvas-inner {
-  margin: 0; max-width: calc(100vw - var(--sidebar-w) - 64px);
-  max-height: calc(100vh - var(--topbar-h) - 64px);
+  margin: 0; max-width: 100%; max-height: 100%;
 }
 
 .canvas-img {
@@ -283,6 +282,38 @@ input, textarea { font-family: inherit; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .sidebar-empty { padding: 32px 16px; text-align: center; color: var(--text2); font-size: 13px; }
+
+/* ── Screens overview ─────────────────────────────────────── */
+.screens-view {
+  flex: 1; overflow-y: auto; background: var(--bg);
+  padding: 48px 48px 32px; display: flex;
+  flex-direction: column; align-items: center; gap: 32px;
+}
+.screens-header { text-align: center; }
+.screens-header h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+.screens-subtitle { font-size: 14px; color: var(--text2); }
+
+.screens-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 1100px;
+}
+.screen-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+  overflow: hidden; cursor: pointer; transition: all .2s;
+}
+.screen-card:hover { border-color: var(--accent); transform: translateY(-3px);
+  box-shadow: 0 8px 28px #ff3b6b22; }
+.screen-thumb {
+  width: 100%; aspect-ratio: 4/3; overflow: hidden; background: var(--bg3);
+  display: flex; align-items: center; justify-content: center;
+}
+.screen-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.screen-info { padding: 10px 14px; }
+.screen-name { font-size: 13px; font-weight: 600; }
+.screen-count { font-size: 11px; color: var(--text2); margin-top: 3px; }
 
 /* ── Bottom pages strip ───────────────────────────────────── */
 .bottom-bar {
