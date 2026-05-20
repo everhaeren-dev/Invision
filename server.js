@@ -206,7 +206,7 @@ const storage = multer.diskStorage({
     const original = Buffer.from(file.originalname, 'latin1').toString('utf8')
     const ext = path.extname(original)
     const base = path.basename(original, ext)
-    const safe = base.replace(/[^a-zA-Z0-9@._-]/g, '_')
+    const safe = base.replace(/[^a-zA-Z0-9À-ɏ@._-]/g, '_')
     const name = safe + ext
     cb(null, name)
   }
@@ -277,9 +277,10 @@ app.post('/api/projects/:projectId/pages', upload.array('images'), async (req, r
   for (const file of req.files) {
     const originalFilename = Buffer.from(file.originalname, 'latin1').toString('utf8')
     const isRetina = /@2x\./i.test(file.filename)
-    const name = path.basename(file.filename, path.extname(file.filename))
+    const name = path.basename(originalFilename, path.extname(originalFilename))
       .replace(/@2x$/i, '')
       .replace(/[_-]/g, ' ')
+      .trim()
 
     const existingPage = db.getPageByOriginalFilename(project.id, originalFilename)
     let version = 1
