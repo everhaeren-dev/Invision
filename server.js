@@ -5,6 +5,7 @@ const fs = require('fs')
 const crypto = require('crypto')
 const bcrypt = require('bcryptjs')
 const session = require('express-session')
+const sharp = require('sharp')
 const db = require('./db')
 
 const app = express()
@@ -255,7 +256,7 @@ app.get('/api/projects/:projectId/pages', (req, res) => {
   res.json(db.getPages(project.id))
 })
 
-app.post('/api/projects/:projectId/pages', upload.array('images'), (req, res) => {
+app.post('/api/projects/:projectId/pages', upload.array('images'), async (req, res) => {
   const project = db.getProject(req.params.projectId)
   if (!project) return res.status(404).json({ error: 'Not found' })
 
@@ -272,7 +273,6 @@ app.post('/api/projects/:projectId/pages', upload.array('images'), (req, res) =>
       .replace(/@2x$/i, '')
       .replace(/[_-]/g, ' ')
 
-    // Check if a page with the same original filename already exists
     const existingPage = db.getPageByOriginalFilename(project.id, originalFilename)
     let version = 1
     if (existingPage) {
@@ -283,6 +283,22 @@ app.post('/api/projects/:projectId/pages', upload.array('images'), (req, res) =>
 
     db.createPage(project.id, name, file.filename, isRetina, order++, originalFilename, version)
     uploaded.push(file.filename)
+
+    // Generate thumbnail + compress JPEG in-place
+    const filePath = path.join(__dirname, 'uploads', String(project.id), file.filename)
+    const base = path.basename(file.filename, path.extname(file.filename))
+    const thumbPath = path.join(__dirname, 'uploads', String(project.id), `thumb_${base}.jpg`)
+    const ext = path.extname(file.filename).toLowerCase()
+    try {
+      await sharp(filePath).resize(400).jpeg({ quality: 80 }).toFile(thumbPath)
+      if (ext === '.jpg' || ext === '.jpeg') {
+        const tmp = filePath + '.tmp'
+        await sharp(filePath).jpeg({ quality: 85 }).toFile(tmp)
+        fs.renameSync(tmp, filePath)
+      }
+    } catch (e) {
+      console.error('Sharp error for', file.filename, e.message)
+    }
   }
 
   res.json({ uploaded, pages: db.getPages(project.id), archived })
@@ -301,8 +317,12 @@ app.delete('/api/pages/:id', (req, res) => {
   const page = db.getPage(req.params.id)
   if (!page) return res.status(404).json({ error: 'Not found' })
 
-  const filePath = path.join(__dirname, 'uploads', String(page.project_id), page.filename)
+  const dir = path.join(__dirname, 'uploads', String(page.project_id))
+  const filePath = path.join(dir, page.filename)
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+  const base = path.basename(page.filename, path.extname(page.filename))
+  const thumbPath = path.join(dir, `thumb_${base}.jpg`)
+  if (fs.existsSync(thumbPath)) fs.unlinkSync(thumbPath)
   db.deletePage(page.id)
   res.json({ ok: true })
 })

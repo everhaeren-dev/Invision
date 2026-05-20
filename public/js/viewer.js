@@ -35,6 +35,13 @@ const viewerBody   = document.getElementById('viewerBody')
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+function thumbSrc(filename) {
+  const base = filename.replace(/\.[^.]+$/, '')
+  return `/uploads/${project.id}/thumb_${base}.jpg`
+}
+function thumbImg(filename, fallback) {
+  return `<img src="${thumbSrc(filename)}" alt="" draggable="false" onerror="this.onerror=null;this.src='/uploads/${project.id}/${fallback || filename}'">`
+}
 function relTime(d) {
   const m = Math.floor((Date.now() - new Date(d)) / 60000)
   if (m < 1) return 'just now'
@@ -120,7 +127,7 @@ function renderScreensGrid(grid) {
     return `
       <div class="screen-card" data-pid="${p.id}">
         <div class="screen-thumb" style="position:relative">
-          <img src="/uploads/${project.id}/${p.filename}" alt="" draggable="false">
+          <img src="/uploads/${project.id}/thumb_${p.filename.replace(/\.[^.]+$/, '')}.jpg" alt="" draggable="false" onerror="this.onerror=null;this.src='/uploads/${project.id}/${p.filename}'">
           ${newCount > 0 ? `<div class="notif-badge">${newCount}</div>` : ''}
         </div>
         <div class="screen-info">
@@ -253,7 +260,7 @@ function renderArchivesGrid(grid) {
   grid.innerHTML = archivedPages.map(p => `
     <div class="screen-card archive-card" data-pid="${p.id}" style="opacity:.85">
       <div class="screen-thumb" style="position:relative">
-        <img src="/uploads/${project.id}/${p.filename}" alt="" draggable="false">
+        <img src="/uploads/${project.id}/thumb_${p.filename.replace(/\.[^.]+$/, '')}.jpg" alt="" draggable="false" onerror="this.onerror=null;this.src='/uploads/${project.id}/${p.filename}'">
         <div style="position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;">
           <span style="color:#bbb;font-size:10px;font-weight:800;letter-spacing:2px;background:rgba(0,0,0,.6);padding:4px 10px;border-radius:4px;">ARCHIVÉ</span>
         </div>
@@ -341,7 +348,7 @@ function renderBottomBar() {
     return `
       <div class="strip-item${p.id === currentPageId ? ' active' : ''}" data-pid="${p.id}">
         <div class="strip-thumb" style="position:relative">
-          <img src="/uploads/${project.id}/${p.filename}" alt="" draggable="false">
+          <img src="/uploads/${project.id}/thumb_${p.filename.replace(/\.[^.]+$/, '')}.jpg" alt="" draggable="false" onerror="this.onerror=null;this.src='/uploads/${project.id}/${p.filename}'">
           ${newCount > 0 && p.id !== currentPageId ? `<div class="notif-badge" style="font-size:9px;min-width:14px;height:14px;top:3px;right:3px">${newCount}</div>` : ''}
         </div>
         <button class="strip-delete-btn" title="Delete page">&times;</button>

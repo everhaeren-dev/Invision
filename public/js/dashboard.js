@@ -40,7 +40,7 @@ async function loadProjects() {
     card.innerHTML = `
       <div class="project-thumb">
         ${p.first_page
-          ? `<img src="/uploads/${p.id}/${p.first_page}" alt="">`
+          ? `<img src="/uploads/${p.id}/thumb_${p.first_page.replace(/\.[^.]+$/, '')}.jpg" alt="" onerror="this.onerror=null;this.src='/uploads/${p.id}/${p.first_page}'">`
           : `<div class="no-thumb">&#128247;</div>`}
       </div>
       <div class="project-info">
