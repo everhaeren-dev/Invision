@@ -14,18 +14,18 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
 // ─── Session ──────────────────────────────────────────────────────────────────
-const SESSION_TTL = 30 * 24 * 60 * 60  // 30 days in seconds
+const REMEMBER_TTL = 30 * 24 * 60 * 60 * 1000  // 30 days in ms
 app.use(session({
   store: new FileStore({
     path: path.join(__dirname, 'data', 'sessions'),
-    ttl: SESSION_TTL,
+    ttl: 30 * 24 * 60 * 60,
     reapInterval: 24 * 60 * 60,
     logFn: () => {}
   }),
   secret: process.env.SESSION_SECRET || 'invision-secret-key-change-in-prod',
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: SESSION_TTL * 1000 }
+  cookie: {}  // no maxAge by default — session cookie until login sets it
 }))
 
 // ─── Protected HTML routes (must be before static middleware) ────────────────
@@ -73,7 +73,7 @@ app.get('/reset/:token', (req, res) => {
 })
 
 app.post('/auth/login', async (req, res) => {
-  const { email, password } = req.body
+  const { email, password, remember_me } = req.body
   if (!email || !password) return res.redirect('/login?error=missing')
   const user = db.getUserByEmail(email.trim().toLowerCase())
   if (!user) return res.redirect('/login?error=invalid')
@@ -81,6 +81,7 @@ app.post('/auth/login', async (req, res) => {
   if (!ok) return res.redirect('/login?error=invalid')
   req.session.userId = user.id
   req.session.userName = user.name
+  if (remember_me) req.session.cookie.maxAge = REMEMBER_TTL
   res.redirect('/')
 })
 
