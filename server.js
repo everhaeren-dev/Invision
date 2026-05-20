@@ -5,6 +5,7 @@ const fs = require('fs')
 const crypto = require('crypto')
 const bcrypt = require('bcryptjs')
 const session = require('express-session')
+const FileStore = require('session-file-store')(session)
 const sharp = require('sharp')
 const db = require('./db')
 
@@ -13,11 +14,18 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
 // ─── Session ──────────────────────────────────────────────────────────────────
+const SESSION_TTL = 30 * 24 * 60 * 60  // 30 days in seconds
 app.use(session({
+  store: new FileStore({
+    path: path.join(__dirname, 'data', 'sessions'),
+    ttl: SESSION_TTL,
+    reapInterval: 24 * 60 * 60,
+    logFn: () => {}
+  }),
   secret: process.env.SESSION_SECRET || 'invision-secret-key-change-in-prod',
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 }
+  cookie: { maxAge: SESSION_TTL * 1000 }
 }))
 
 // ─── Protected HTML routes (must be before static middleware) ────────────────
