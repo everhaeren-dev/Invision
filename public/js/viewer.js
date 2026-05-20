@@ -261,7 +261,7 @@ function renderArchivesGrid(grid) {
     <div class="screen-card archive-card" data-pid="${p.id}" style="opacity:.85">
       <div class="screen-thumb" style="position:relative">
         <img src="/uploads/${project.id}/thumb_${p.filename.replace(/\.[^.]+$/, '')}.jpg" alt="" draggable="false" onerror="this.onerror=null;this.src='/uploads/${project.id}/${p.filename}'">
-        <div style="position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;">
+        <div style="position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;pointer-events:none;">
           <span style="color:#bbb;font-size:10px;font-weight:800;letter-spacing:2px;background:rgba(0,0,0,.6);padding:4px 10px;border-radius:4px;">ARCHIVÉ</span>
         </div>
       </div>
@@ -269,11 +269,58 @@ function renderArchivesGrid(grid) {
         <div class="screen-name">${esc(p.name)}</div>
         <div class="screen-count">v${p.version || 1} · archivée ${relTime(p.archived_at)}</div>
       </div>
+      <div class="screen-menu">
+        <button class="screen-menu-btn" title="Options">⋮</button>
+        <div class="screen-dropdown hidden">
+          <button data-action="unarchive">↩ Restaurer</button>
+          <button data-action="delete" class="danger">Supprimer</button>
+        </div>
+      </div>
     </div>
   `).join('')
 
   grid.querySelectorAll('.archive-card').forEach(card => {
-    card.addEventListener('click', () => showArchivedPageViewer(Number(card.dataset.pid)))
+    const pid = Number(card.dataset.pid)
+
+    card.addEventListener('click', e => {
+      if (e.target.closest('.screen-menu')) return
+      showArchivedPageViewer(pid)
+    })
+
+    const menuBtn = card.querySelector('.screen-menu-btn')
+    const dropdown = card.querySelector('.screen-dropdown')
+    menuBtn.addEventListener('click', e => {
+      e.stopPropagation()
+      const wasHidden = dropdown.classList.contains('hidden')
+      grid.querySelectorAll('.screen-dropdown').forEach(d => d.classList.add('hidden'))
+      if (wasHidden) dropdown.classList.remove('hidden')
+    })
+
+    dropdown.querySelector('[data-action="unarchive"]').addEventListener('click', async e => {
+      e.stopPropagation()
+      dropdown.classList.add('hidden')
+      await fetch(`/api/pages/${pid}/unarchive`, { method: 'PUT' })
+      const [pagesRes, archivedRes] = await Promise.all([
+        fetch(`/api/projects/${projectId}/pages`).then(r => r.json()),
+        fetch(`/api/projects/${projectId}/archived`).then(r => r.json())
+      ])
+      pages = pagesRes
+      archivedPages = archivedRes
+      for (const p of pages) { if (!allComments[p.id]) allComments[p.id] = [] }
+      await loadAllComments()
+      screensTab = 'screens'
+      showScreensView()
+    })
+
+    dropdown.querySelector('[data-action="delete"]').addEventListener('click', async e => {
+      e.stopPropagation()
+      dropdown.classList.add('hidden')
+      const page = archivedPages.find(p => p.id === pid)
+      if (!confirm(`Supprimer définitivement "${page?.name}" ?\nL'image et tous ses commentaires seront supprimés.`)) return
+      await fetch(`/api/pages/${pid}`, { method: 'DELETE' })
+      archivedPages = archivedPages.filter(p => p.id !== pid)
+      showScreensView()
+    })
   })
 }
 
@@ -1079,6 +1126,20 @@ function showArchivedPageViewer(pageId) {
     overlay.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:10;'
     overlay.innerHTML = '<div style="background:rgba(0,0,0,0.7);color:#aaa;font-size:24px;font-weight:800;letter-spacing:4px;padding:12px 32px;border-radius:8px;border:2px solid #555;">ARCHIVÉ</div>'
     canvasInner.appendChild(overlay)
+
+    // Read-only pins above the dim overlay
+    ;(page.comments || []).filter(c => c.x != null && c.y != null).forEach((c, idx) => {
+      const pin = document.createElement('div')
+      pin.className = `pin ${c.is_team ? 'team-pin' : 'client-pin'}`
+      pin.style.left = c.x + '%'
+      pin.style.top  = c.y + '%'
+      pin.style.zIndex = '15'
+      pin.style.cursor = 'default'
+      pin.style.transition = 'none'
+      pin.textContent = idx + 1
+      pin.title = `${c.author} : ${c.text}`
+      canvasInner.appendChild(pin)
+    })
   }
 
   const comments = page.comments || []

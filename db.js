@@ -118,6 +118,13 @@ module.exports = {
     save(db)
   },
 
+  unarchivePage: (id) => {
+    const db = load()
+    const p = db.pages.find(p => p.id === Number(id))
+    if (p) { p.is_archived = 0; p.archived_at = null }
+    save(db)
+  },
+
   getPageByOriginalFilename: (projectId, originalFilename) => {
     const db = load()
     const ext = path.extname(originalFilename)

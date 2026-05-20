@@ -187,6 +187,14 @@ app.put('/api/pages/:id/archive', (req, res) => {
   res.json({ ok: true })
 })
 
+// Unarchive (restore) a page
+app.put('/api/pages/:id/unarchive', (req, res) => {
+  const page = db.getPage(req.params.id)
+  if (!page) return res.status(404).json({ error: 'Not found' })
+  db.unarchivePage(page.id)
+  res.json({ ok: true })
+})
+
 // ─── Multer storage ───────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
