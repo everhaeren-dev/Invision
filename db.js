@@ -192,6 +192,13 @@ module.exports = {
     save(db)
   },
 
+  updateCommentPosition: (id, x, y) => {
+    const db = load()
+    const c = db.comments.find(c => c.id === Number(id))
+    if (c) { c.x = x; c.y = y }
+    save(db)
+  },
+
   createComment: (pageId, x, y, text, author, isTeam, parentId = null, status = 'open') => {
     const db = load()
     const c = { id: nextId(db, 'comments'), page_id: Number(pageId), x, y, text, author, is_team: isTeam ? 1 : 0, parent_id: parentId, status: parentId ? null : status, created_at: now() }

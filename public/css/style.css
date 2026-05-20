@@ -204,7 +204,7 @@ input, textarea { font-family: inherit; }
 .pin {
   position: absolute; width: 28px; height: 28px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 700; cursor: pointer;
+  font-size: 11px; font-weight: 700; cursor: grab;
   transform: translate(-50%, -50%);
   border: 2px solid rgba(255,255,255,.3);
   box-shadow: 0 2px 8px #0006;
@@ -215,6 +215,11 @@ input, textarea { font-family: inherit; }
   box-shadow: 0 4px 16px #0008; z-index: 6; }
 .pin.team-pin { background: var(--team-pin); }
 .pin.client-pin { background: var(--client-pin); }
+.pin.pin-dragging {
+  cursor: grabbing; transition: none;
+  transform: translate(-50%, -50%) scale(1.15);
+  box-shadow: 0 6px 24px #000b; z-index: 30;
+}
 
 /* ── Comment bubble (on canvas) ──────────────────────────── */
 .comment-bubble {

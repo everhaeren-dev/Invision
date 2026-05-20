@@ -379,6 +379,16 @@ app.post('/api/comments/:id/replies', (req, res) => {
   res.json({ id: r.lastInsertRowid, page_id: parent.page_id, parent_id: parent.id, text, author, is_team: is_team ? 1 : 0, created_at: new Date().toISOString() })
 })
 
+// Move a pin
+app.put('/api/comments/:id/position', (req, res) => {
+  const c = db.getComment(req.params.id)
+  if (!c) return res.status(404).json({ error: 'Not found' })
+  const { x, y } = req.body
+  if (x == null || y == null) return res.status(400).json({ error: 'x and y required' })
+  db.updateCommentPosition(c.id, Number(x), Number(y))
+  res.json({ ok: true })
+})
+
 // Resolve / reopen a comment
 app.put('/api/comments/:id/resolve', (req, res) => {
   const c = db.getComment(req.params.id)

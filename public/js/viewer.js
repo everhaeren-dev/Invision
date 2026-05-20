@@ -652,8 +652,57 @@ function renderPins() {
     pin.style.top  = c.y + '%'
     pin.textContent = idx + 1
     pin.dataset.commentId = c.id
+    let _pinDragged = false
+    pin.addEventListener('mousedown', e => {
+      if (commentMode) return
+      e.stopPropagation()
+      e.preventDefault()
+      const startMouseX = e.clientX
+      const startMouseY = e.clientY
+      const startPinX = c.x
+      const startPinY = c.y
+      _pinDragged = false
+
+      const onMove = e => {
+        const rect = canvasImg.getBoundingClientRect()
+        const dx = e.clientX - startMouseX
+        const dy = e.clientY - startMouseY
+        if (!_pinDragged && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+          _pinDragged = true
+          pin.classList.add('pin-dragging')
+          closeAllBubbles()
+          activePinId = null
+        }
+        if (!_pinDragged) return
+        const newX = Math.max(0, Math.min(100, startPinX + dx / rect.width * 100))
+        const newY = Math.max(0, Math.min(100, startPinY + dy / rect.height * 100))
+        pin.style.left = newX + '%'
+        pin.style.top  = newY + '%'
+      }
+
+      const onUp = async () => {
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', onUp)
+        if (!_pinDragged) return
+        pin.classList.remove('pin-dragging')
+        const newX = parseFloat(pin.style.left)
+        const newY = parseFloat(pin.style.top)
+        c.x = newX
+        c.y = newY
+        await fetch(`/api/comments/${c.id}/position`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ x: newX, y: newY })
+        })
+        renderPins()
+      }
+
+      document.addEventListener('mousemove', onMove)
+      document.addEventListener('mouseup', onUp)
+    })
+
     pin.addEventListener('click', e => {
       e.stopPropagation()
+      if (_pinDragged) return
       if (commentMode) return
       if (activePinId === c.id) { activePinId = null; closeAllBubbles(); renderPins(); return }
       activePinId = c.id
