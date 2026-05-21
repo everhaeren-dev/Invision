@@ -583,6 +583,15 @@ function cancelCommentMode() {
 document.getElementById('cancelCommentMode').addEventListener('click', cancelCommentMode)
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { cancelCommentMode(); closeAllBubbles() }
+
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+      viewMode === 'viewer' && !commentMode &&
+      !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+    const idx = pages.findIndex(p => p.id === currentPageId)
+    if (idx === -1) return
+    const next = e.key === 'ArrowRight' ? pages[idx + 1] : pages[idx - 1]
+    if (next) switchPage(next.id)
+  }
 })
 
 // ── Canvas click → place comment ──────────────────────────────────────────────
