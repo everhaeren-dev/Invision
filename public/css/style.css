@@ -178,17 +178,19 @@ input, textarea { font-family: inherit; }
 
 /* ── Canvas ───────────────────────────────────────────────── */
 .canvas-area {
-  flex: 1; overflow: auto; background: var(--bg); display: flex;
-  align-items: flex-start; justify-content: flex-start; position: relative;
-  cursor: crosshair;
+  flex: 1; overflow: auto; display: flex;
+  align-items: flex-start; justify-content: center; position: relative;
+  background-color: #13131e;
+  background-image: radial-gradient(circle, #2a2a3e 1px, transparent 1px);
+  background-size: 24px 24px;
 }
-.canvas-area.fit-mode { align-items: flex-start; justify-content: flex-start; overflow-y: auto; overflow-x: hidden; }
+.canvas-area.fit-mode { overflow-y: auto; overflow-x: hidden; }
 .canvas-area.comment-mode { cursor: crosshair; }
 .canvas-area.default-mode { cursor: default; }
 
 .canvas-inner {
   position: relative; display: inline-block; flex-shrink: 0;
-  margin: 32px;
+  margin: 40px;
 }
 .canvas-area.fit-mode .canvas-inner {
   margin: 0; width: 100%; display: block;
@@ -197,6 +199,7 @@ input, textarea { font-family: inherit; }
 .canvas-img {
   display: block; max-width: 100%; height: auto; user-select: none;
   border: 1px solid var(--border);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
 }
 .canvas-area.fit-mode .canvas-img { width: 100% !important; height: auto !important; max-height: none; }
 
@@ -472,13 +475,17 @@ input, textarea { font-family: inherit; }
 /* ── Upload progress ──────────────────────────────────────── */
 .upload-progress {
   position: fixed; bottom: 24px; right: 24px; background: var(--bg2);
-  border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;
-  min-width: 240px; z-index: 100; box-shadow: 0 4px 20px #0006;
+  border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
+  min-width: 300px; max-width: 380px; z-index: 100; box-shadow: 0 8px 32px #0009;
 }
-.upload-progress p { font-size: 13px; margin-bottom: 8px; }
-.progress-bar { height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; }
-.progress-fill { height: 100%; background: var(--accent); border-radius: 2px;
-  transition: width .3s; }
+.progress-bar { height: 5px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .2s; }
+.upload-file-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); padding: 2px 0; }
+.upload-file-item .ufi-icon { flex-shrink: 0; width: 14px; text-align: center; }
+.upload-file-item .ufi-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.upload-file-item.uploading { color: var(--text); }
+.upload-file-item.done { color: var(--green); }
+.upload-file-item.error { color: var(--accent); }
 
 /* ══════════════════════════════════════════════════════════
    SHARE VIEW

@@ -27,8 +27,11 @@ const commentBar   = document.getElementById('commentModeBar')
 const dropOverlay  = document.getElementById('dropOverlay')
 const shareToast   = document.getElementById('shareToast')
 const shareUrlInput= document.getElementById('shareUrl')
-const uploadProg   = document.getElementById('uploadProgress')
-const progressFill = document.getElementById('progressFill')
+const uploadProg     = document.getElementById('uploadProgress')
+const progressFill   = document.getElementById('progressFill')
+const uploadTitle    = document.getElementById('uploadTitle')
+const uploadPercent  = document.getElementById('uploadPercent')
+const uploadFileList = document.getElementById('uploadFileList')
 const bottomBar    = document.getElementById('bottomBar')
 const screensView  = document.getElementById('screensView')
 const viewerBody   = document.getElementById('viewerBody')
@@ -1020,7 +1023,7 @@ async function showArchiveConfirm(conflicts) {
 async function uploadFiles(files) {
   if (!files.length) return
 
-  // Check for filename conflicts before uploading
+  // Conflict check upfront for all files at once
   try {
     const names = files.map(f => f.name).join(',')
     const conflicts = await fetch(`/api/projects/${projectId}/pages/conflicts?names=${encodeURIComponent(names)}`).then(r => r.json())
@@ -1030,38 +1033,82 @@ async function uploadFiles(files) {
     }
   } catch (e) { /* proceed if check fails */ }
 
-  const fd = new FormData()
-  for (const f of files) fd.append('images', f)
-
+  // Build panel
+  uploadTitle.textContent = `${files.length} fichier${files.length > 1 ? 's' : ''} en cours d'upload`
+  uploadPercent.textContent = '0%'
+  uploadFileList.innerHTML = files.map((f, i) => `
+    <div class="upload-file-item" data-idx="${i}">
+      <span class="ufi-icon">⏳</span>
+      <span class="ufi-name">${esc(f.name)}</span>
+    </div>
+  `).join('')
+  progressFill.style.width = '0%'
   uploadProg.classList.remove('hidden')
-  progressFill.style.width = '30%'
 
-  try {
-    const res = await fetch(`/api/projects/${projectId}/pages`, {
-      method: 'POST', body: fd
-    }).then(r => r.json())
+  const originalPageIds = new Set(pages.map(p => p.id))
+  let lastRes = null
 
-    progressFill.style.width = '100%'
-    pages = res.pages
+  // Upload one file at a time so each gets a checkmark when done + real XHR progress
+  for (let i = 0; i < files.length; i++) {
+    const item = uploadFileList.querySelector(`[data-idx="${i}"]`)
+    item.querySelector('.ufi-icon').textContent = '↑'
+    item.classList.add('uploading')
+
+    try {
+      lastRes = await uploadSingleFile(files[i], pct => {
+        const overall = Math.round((i + pct / 100) / files.length * 100)
+        progressFill.style.width = overall + '%'
+        uploadPercent.textContent = overall + '%'
+      })
+      item.querySelector('.ufi-icon').textContent = '✓'
+      item.classList.replace('uploading', 'done')
+    } catch (e) {
+      item.querySelector('.ufi-icon').textContent = '✗'
+      item.classList.replace('uploading', 'error')
+    }
+  }
+
+  progressFill.style.width = '100%'
+  uploadPercent.textContent = '100%'
+
+  if (lastRes) {
+    pages = lastRes.pages
     for (const p of pages) { if (!allComments[p.id]) allComments[p.id] = [] }
     await loadAllComments()
-
-    // Refresh archived pages list
     archivedPages = await fetch(`/api/projects/${projectId}/archived`).then(r => r.json())
 
     if (viewMode === 'screens') {
       showScreensView()
     } else {
       renderPageSelect()
-      const newPage = res.pages[res.pages.length - res.uploaded.length]
-      if (newPage) switchPage(newPage.id)
+      const firstNew = pages.find(p => !originalPageIds.has(p.id))
+      if (firstNew) switchPage(firstNew.id)
     }
-  } finally {
-    setTimeout(() => {
-      uploadProg.classList.add('hidden')
-      progressFill.style.width = '0%'
-    }, 800)
   }
+
+  setTimeout(() => { uploadProg.classList.add('hidden'); progressFill.style.width = '0%' }, 1500)
+}
+
+function uploadSingleFile(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData()
+    fd.append('images', file)
+    const xhr = new XMLHttpRequest()
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable) onProgress(Math.min(90, Math.round(e.loaded / e.total * 90)))
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress(100)
+        try { resolve(JSON.parse(xhr.responseText)) } catch (e) { reject(new Error('Invalid response')) }
+      } else {
+        reject(new Error(`HTTP ${xhr.status}`))
+      }
+    }
+    xhr.onerror = () => reject(new Error('Network error'))
+    xhr.open('POST', `/api/projects/${projectId}/pages`)
+    xhr.send(fd)
+  })
 }
 
 document.getElementById('fileInput').addEventListener('change', e => {

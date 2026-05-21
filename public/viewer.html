@@ -116,8 +116,12 @@
 
 <!-- Upload progress -->
 <div class="upload-progress hidden" id="uploadProgress">
-  <p>Uploading…</p>
-  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span id="uploadTitle" style="font-size:13px;font-weight:600">Upload en cours…</span>
+    <span id="uploadPercent" style="font-size:12px;color:var(--text2)">0%</span>
+  </div>
+  <div class="progress-bar" style="margin-bottom:10px"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+  <div id="uploadFileList"></div>
 </div>
 
 <script src="/js/viewer.js"></script>
