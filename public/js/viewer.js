@@ -195,13 +195,12 @@ function renderScreensGrid(grid) {
     })
 
     // Single click → navigate (debounced to allow dblclick)
+    let _preventClick = false
     card.addEventListener('click', e => {
       if (e.target.closest('.screen-menu') || e.target.tagName === 'INPUT') return
+      if (_preventClick) { _preventClick = false; return }
       if (_clickTimer) return
-      _clickTimer = setTimeout(() => {
-        _clickTimer = null
-        enterViewerMode(pid)
-      }, 220)
+      _clickTimer = setTimeout(() => { _clickTimer = null; enterViewerMode(pid) }, 220)
     })
 
     // Double-click on name → rename
@@ -211,43 +210,49 @@ function renderScreensGrid(grid) {
       startScreenRename(card, pid)
     })
 
-    // Drag & drop reorder in grid
-    card.setAttribute('draggable', 'true')
-    let enterCount = 0
-    card.addEventListener('dragstart', e => {
-      if (e.target.tagName === 'INPUT' || e.target.closest('.screen-menu')) { e.preventDefault(); return }
-      e.dataTransfer.effectAllowed = 'move'
-      e.dataTransfer.setData('text/plain', String(pid))
-      e.stopPropagation()
-      setTimeout(() => card.classList.add('dragging'), 0)
-    })
-    card.addEventListener('dragend', () => { card.classList.remove('dragging', 'drag-over'); enterCount = 0 })
-    card.addEventListener('dragenter', e => {
-      e.preventDefault(); e.stopPropagation()
-      if (enterCount === 0) card.classList.add('drag-over')
-      enterCount++
-    })
-    card.addEventListener('dragleave', e => {
-      e.stopPropagation()
-      enterCount--
-      if (enterCount <= 0) { enterCount = 0; card.classList.remove('drag-over') }
-    })
-    card.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move' })
-    card.addEventListener('drop', async e => {
-      e.preventDefault(); e.stopPropagation()
-      card.classList.remove('drag-over'); enterCount = 0
-      const draggedPid = Number(e.dataTransfer.getData('text/plain'))
-      if (!draggedPid || draggedPid === pid) return
-      const draggedIdx = pages.findIndex(p => p.id === draggedPid)
-      const targetIdx = pages.findIndex(p => p.id === pid)
-      if (draggedIdx === -1 || targetIdx === -1) return
-      const [draggedPage] = pages.splice(draggedIdx, 1)
-      pages.splice(targetIdx, 0, draggedPage)
-      await fetch(`/api/projects/${projectId}/pages/order`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pages: pages.map((p, i) => ({ id: p.id, order: i })) })
+    // Pointer-events drag to reorder (works on all browsers/proxies unlike HTML5 DnD)
+    ;(() => {
+      let startX, startY, dragging = false
+      card.addEventListener('pointerdown', e => {
+        if (e.button !== 0 || e.target.closest('.screen-menu') || e.target.tagName === 'INPUT') return
+        startX = e.clientX; startY = e.clientY; dragging = false
+        const onMove = e => {
+          if (!dragging && Math.hypot(e.clientX - startX, e.clientY - startY) > 6) {
+            dragging = true; card.classList.add('dragging')
+          }
+          if (!dragging) return
+          card.style.pointerEvents = 'none'
+          const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.screen-card[data-pid]')
+          card.style.pointerEvents = ''
+          grid.querySelectorAll('.screen-card').forEach(c => c.classList.remove('drag-over'))
+          if (over && over !== card) over.classList.add('drag-over')
+        }
+        const onUp = async () => {
+          document.removeEventListener('pointermove', onMove)
+          document.removeEventListener('pointerup', onUp)
+          card.classList.remove('dragging')
+          if (!dragging) return
+          dragging = false; _preventClick = true
+          const target = grid.querySelector('.screen-card.drag-over')
+          grid.querySelectorAll('.screen-card').forEach(c => c.classList.remove('drag-over'))
+          if (!target) return
+          const targetPid = Number(target.dataset.pid)
+          if (targetPid === pid) return
+          const di = pages.findIndex(p => p.id === pid)
+          const ti = pages.findIndex(p => p.id === targetPid)
+          if (di === -1 || ti === -1) return
+          const [moved] = pages.splice(di, 1)
+          pages.splice(ti, 0, moved)
+          await fetch(`/api/projects/${projectId}/pages/order`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pages: pages.map((p, i) => ({ id: p.id, order: i })) })
+          })
+          showScreensView()
+        }
+        document.addEventListener('pointermove', onMove)
+        document.addEventListener('pointerup', onUp)
       })
-      showScreensView()
+    })()
     })
   })
 }
@@ -427,56 +432,50 @@ function renderBottomBar() {
       }
     })
 
-    // Drag & drop reorder — use enterCount to handle child-element dragleave firing
-    item.setAttribute('draggable', 'true')
-    let enterCount = 0
-    item.addEventListener('dragstart', e => {
-      if (e.target.tagName === 'INPUT') { e.preventDefault(); return }
-      e.dataTransfer.effectAllowed = 'move'
-      e.dataTransfer.setData('text/plain', String(item.dataset.pid))
-      e.stopPropagation()
-      setTimeout(() => item.classList.add('dragging'), 0)
-    })
-    item.addEventListener('dragend', () => {
-      item.classList.remove('dragging', 'drag-over')
-      enterCount = 0
-    })
-    item.addEventListener('dragenter', e => {
-      e.preventDefault()
-      e.stopPropagation()
-      if (enterCount === 0) item.classList.add('drag-over')
-      enterCount++
-    })
-    item.addEventListener('dragleave', e => {
-      e.stopPropagation()
-      enterCount--
-      if (enterCount <= 0) { enterCount = 0; item.classList.remove('drag-over') }
-    })
-    item.addEventListener('dragover', e => {
-      e.preventDefault()
-      e.stopPropagation()
-      e.dataTransfer.dropEffect = 'move'
-    })
-    item.addEventListener('drop', async e => {
-      e.preventDefault()
-      e.stopPropagation()
-      item.classList.remove('drag-over')
-      enterCount = 0
-      const draggedPid = Number(e.dataTransfer.getData('text/plain'))
-      const targetPid = Number(item.dataset.pid)
-      if (!draggedPid || draggedPid === targetPid) return
-      const draggedIdx = pages.findIndex(p => p.id === draggedPid)
-      const targetIdx = pages.findIndex(p => p.id === targetPid)
-      if (draggedIdx === -1 || targetIdx === -1) return
-      const [draggedPage] = pages.splice(draggedIdx, 1)
-      pages.splice(targetIdx, 0, draggedPage)
-      renderBottomBar()
-      renderPageSelect()
-      await fetch(`/api/projects/${projectId}/pages/order`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pages: pages.map((p, i) => ({ id: p.id, order: i })) })
+    // Pointer-events drag to reorder
+    ;(() => {
+      let startX, startY, dragging = false
+      item.addEventListener('pointerdown', e => {
+        if (e.button !== 0 || e.target.tagName === 'INPUT') return
+        startX = e.clientX; startY = e.clientY; dragging = false
+        const onMove = e => {
+          if (!dragging && Math.hypot(e.clientX - startX, e.clientY - startY) > 6) {
+            dragging = true; item.classList.add('dragging')
+          }
+          if (!dragging) return
+          item.style.pointerEvents = 'none'
+          const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('.strip-item[data-pid]')
+          item.style.pointerEvents = ''
+          bottomBar.querySelectorAll('.strip-item').forEach(s => s.classList.remove('drag-over'))
+          if (over && over !== item) over.classList.add('drag-over')
+        }
+        const onUp = async () => {
+          document.removeEventListener('pointermove', onMove)
+          document.removeEventListener('pointerup', onUp)
+          item.classList.remove('dragging')
+          if (!dragging) return
+          dragging = false
+          const target = bottomBar.querySelector('.strip-item.drag-over')
+          bottomBar.querySelectorAll('.strip-item').forEach(s => s.classList.remove('drag-over'))
+          if (!target) return
+          const targetPid = Number(target.dataset.pid)
+          const thisPid = Number(item.dataset.pid)
+          if (targetPid === thisPid) return
+          const di = pages.findIndex(p => p.id === thisPid)
+          const ti = pages.findIndex(p => p.id === targetPid)
+          if (di === -1 || ti === -1) return
+          const [moved] = pages.splice(di, 1)
+          pages.splice(ti, 0, moved)
+          renderBottomBar(); renderPageSelect()
+          await fetch(`/api/projects/${projectId}/pages/order`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pages: pages.map((p, i) => ({ id: p.id, order: i })) })
+          })
+        }
+        document.addEventListener('pointermove', onMove)
+        document.addEventListener('pointerup', onUp)
       })
-    })
+    })()
   })
 
   bottomBar.querySelectorAll('.strip-name').forEach(input => {
